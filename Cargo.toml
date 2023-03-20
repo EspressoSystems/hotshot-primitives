@@ -1,0 +1,14 @@
+[package]
+name = "hotshot-primitives"
+version = "0.1.0"
+edition = "2021"
+authors = ["Espresso Systems <hello@espressosys.com>"]
+license = "MIT"
+rust-version = "1.64.0"
+homepage = "https://github.com/EspressoSystems/hotshot-primitives"
+repository = "https://github.com/EspressoSystems/hotshot-primitives"
+
+[dependencies]
+ark-std = { version = "0.4.0", default-features = false }
+jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.2.0" }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
