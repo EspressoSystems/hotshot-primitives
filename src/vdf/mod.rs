@@ -20,7 +20,9 @@ pub trait VDF {
     type Output: Debug + Clone + Send + Sync + for<'a> Deserialize<'a> + Serialize + PartialEq + Eq;
 
     /// Generates a public parameter from RNG with given difficulty.
-    fn param_gen<R: CryptoRng + RngCore>(
+    /// Concrete instantiations of VDF shall document properly about the correspondence between
+    /// the difficulty value and the time required for evaluation/proof generation.
+    fn setup<R: CryptoRng + RngCore>(
         &self,
         difficulty: u64,
         prng: Option<&mut R>,
@@ -28,17 +30,17 @@ pub trait VDF {
 
     /// Computes the VDF output and proof.
     fn eval(
-        &mut self,
+        &self,
         pp: &Self::PublicParameter,
         input: &Self::Input,
     ) -> Result<(Self::Output, Self::Proof), PrimitivesError>;
 
     /// Verifies a VDF output given the proof.
     fn verify(
-        &mut self,
+        &self,
         pp: &Self::PublicParameter,
         input: &Self::Input,
         output: &Self::Output,
         proof: &Self::Proof,
-    ) -> Result<bool, PrimitivesError>;
+    ) -> Result<(), PrimitivesError>;
 }
