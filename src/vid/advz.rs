@@ -6,28 +6,17 @@ use sha2::digest::generic_array::{typenum::U32, GenericArray};
 
 pub struct Advz {
     num_storage_nodes: u16,
-    payload_byte_length: u64,
 }
 
 impl Advz {
-    pub fn new(num_storage_nodes: u16, payload_byte_length: u64) -> Self {
-        // TODO: for now assume payload_byte_length is a multiple of num_storage_nodes
-        assert!(
-            payload_byte_length % (num_storage_nodes as u64) == 0,
-            "num_storage_nodes {} must divide payload_byte_length {}",
-            num_storage_nodes,
-            payload_byte_length
-        );
-        Self {
-            num_storage_nodes,
-            payload_byte_length,
-        }
+    pub fn new(num_storage_nodes: u16) -> Self {
+        Self { num_storage_nodes }
     }
 }
 
 pub type Commitment = GenericArray<u8, U32>;
 
-pub struct ShareData {
+pub struct Share {
     // TODO: split `polynomial_commitments` from ShareData to avoid duplicate data?
     // TODO `u32` -> KZG commitments
     // polynomial_commitments: Vec<u32>,
@@ -40,50 +29,31 @@ pub struct ShareData {
 }
 
 impl VID for Advz {
-    type Payload = Vec<u8>;
-
     type Commitment = Commitment;
 
-    type ShareData = ShareData;
+    type Share = Share;
 
-    type Acknowledgement = ();
-
-    type RetrievabilityCert = ();
-
-    fn commit(&self, payload: &Self::Payload) -> Self::Commitment {
-        assert!((payload.len() as u64) == self.payload_byte_length);
+    fn commit(&self, _payload: &[u8]) -> Self::Commitment {
         // TODO: for now just return the zero hash digest
         GenericArray::from([0; 32])
     }
 
-    fn disperse(&self, _payload: &Self::Payload) -> Vec<Self::ShareData> {
+    fn disperse(&self, _payload: &[u8]) -> Vec<Self::Share> {
         assert!(self.num_storage_nodes == 0); // temporary compiler pacification
         todo!()
     }
 
-    fn disperse_reply(
+    fn verify_share(
         &self,
-        _my_id: u16,
-        _share_data: &Self::ShareData,
-    ) -> Result<Self::Acknowledgement, jf_primitives::errors::PrimitivesError> {
+        _share: &Self::Share,
+    ) -> Result<(), jf_primitives::errors::PrimitivesError> {
         todo!()
     }
 
-    fn retrievability_cert(
+    fn recover_payload(
         &self,
-        _acknowledgements: &[Self::Acknowledgement],
-    ) -> Result<Self::RetrievabilityCert, jf_primitives::errors::PrimitivesError> {
-        todo!()
-    }
-
-    fn retrieve(&self, _cert: &Self::RetrievabilityCert) -> () {
-        todo!()
-    }
-
-    fn retrieve_reply(
-        &self,
-        _commitment: &Self::Commitment,
-    ) -> Result<Self::ShareData, jf_primitives::errors::PrimitivesError> {
+        _shares: &[Self::Share],
+    ) -> Result<Vec<u8>, jf_primitives::errors::PrimitivesError> {
         todo!()
     }
 }
