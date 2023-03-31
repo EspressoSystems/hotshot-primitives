@@ -2,3 +2,4 @@
 #![deny(warnings)]
 
 pub mod vdf;
+pub mod vid;
