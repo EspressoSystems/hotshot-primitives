@@ -14,7 +14,7 @@ pub trait VID {
     type Share;
 
     /// Compute a payload commitment.
-    fn commit(&self, payload: &[u8]) -> Self::Commitment;
+    fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError>;
 
     /// Compute shares to send to the storage nodes
     fn disperse(&self, payload: &[u8]) -> Vec<Self::Share>;

@@ -2,19 +2,70 @@
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
 use super::{Vec, VID};
-use sha2::digest::generic_array::{typenum::U32, GenericArray};
+use ark_bls12_381::Bls12_381;
+use ark_ec::pairing::Pairing;
+use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
+use ark_std::string::ToString;
+use jf_primitives::{
+    errors::PrimitivesError,
+    pcs::{
+        prelude::{
+            UnivariateKzgPCS,
+            UnivariateProverParam,
+            UnivariateUniversalParams,
+            // UnivariateVerifierParam,
+        },
+        PolynomialCommitmentScheme, StructuredReferenceString,
+    },
+};
+use jf_utils::bytes_to_field_elements;
+use jf_utils::test_rng;
+// use sha2::digest::generic_array::{typenum::U32, GenericArray};
 
 pub struct Advz {
-    num_storage_nodes: u16,
+    num_storage_nodes: usize,
+    reconstruction_size: usize,
+    // temp_pp: UnivariateUniversalParams<Bls12_381>, // TODO temporary until we have a KZG ceremony
+    ck: UnivariateProverParam<<Bls12_381 as Pairing>::G1Affine>,
+    // vk: UnivariateVerifierParam<Bls12_381>,
 }
 
 impl Advz {
-    pub fn new(num_storage_nodes: u16) -> Self {
-        Self { num_storage_nodes }
+    /// TODO we desperately need better error handling
+    pub fn new(
+        num_storage_nodes: usize,
+        reconstruction_size: usize,
+    ) -> Result<Self, PrimitivesError> {
+        if reconstruction_size > num_storage_nodes {
+            return Err(PrimitivesError::ParameterError(
+                "Number of storage nodes must be at least the message length.".to_string(),
+            ));
+        }
+        let pp = UnivariateUniversalParams::<Bls12_381>::gen_srs_for_testing(
+            &mut test_rng(),
+            reconstruction_size,
+        )
+        .map_err(|_| {
+            PrimitivesError::ParameterError(
+                "Number of storage nodes must be at least the message length.".to_string(),
+            )
+        })?;
+        let (ck, _vk) = pp
+            .trim(reconstruction_size)
+            .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
+
+        Ok(Self {
+            num_storage_nodes,
+            reconstruction_size,
+            ck,
+            // vk,
+        })
     }
 }
 
-pub type Commitment = GenericArray<u8, U32>;
+// pub type Commitment = GenericArray<u8, U32>;
+pub type Commitment =
+    <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Commitment;
 
 pub struct Share {
     // TODO: split `polynomial_commitments` from ShareData to avoid duplicate data?
@@ -33,13 +84,21 @@ impl VID for Advz {
 
     type Share = Share;
 
-    fn commit(&self, _payload: &[u8]) -> Self::Commitment {
+    fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
+        let field_elements = bytes_to_field_elements(payload);
+        let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
+
+        let commitment = UnivariateKzgPCS::commit(&self.ck, &polynomial)
+            .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
+
         // TODO: for now just return the zero hash digest
-        GenericArray::from([0; 32])
+        Ok(commitment)
+        // Ok(GenericArray::from([0; 32]))
     }
 
     fn disperse(&self, _payload: &[u8]) -> Vec<Self::Share> {
         assert!(self.num_storage_nodes == 0); // temporary compiler pacification
+        assert!(self.reconstruction_size == 0); // temporary compiler pacification
         todo!()
     }
 
@@ -57,3 +116,7 @@ impl VID for Advz {
         todo!()
     }
 }
+
+// impl Advz {
+//     fn (&self)
+// }
