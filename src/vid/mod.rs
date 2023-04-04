@@ -17,7 +17,7 @@ pub trait VID {
     fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError>;
 
     /// Compute shares to send to the storage nodes
-    fn disperse(&self, payload: &[u8]) -> Vec<Self::Share>;
+    fn disperse(&self, payload: &[u8]) -> Result<Vec<Self::Share>, PrimitivesError>;
 
     /// Verify a share. Used by both storage node and retrieval client.
     fn verify_share(&self, share: &Self::Share) -> Result<(), PrimitivesError>;
