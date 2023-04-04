@@ -251,9 +251,31 @@ mod tests {
         ];
 
         let shares = vid.disperse(&payload).unwrap();
+        assert_eq!(shares.len(), 3);
 
         for s in shares.iter() {
             vid.verify_share(s).unwrap();
         }
+    }
+
+    #[test]
+    fn basic_correctness_field_elements() {
+        let vid = Advz::new(3, 2).unwrap();
+
+        let field_elements = [
+            <Bls12_381 as Pairing>::ScalarField::from(7u64),
+            <Bls12_381 as Pairing>::ScalarField::from(13u64),
+        ];
+
+        let shares = vid.disperse_field_elements(&field_elements).unwrap();
+        assert_eq!(shares.len(), 3);
+
+        for s in shares.iter() {
+            vid.verify_share(s).unwrap();
+        }
+
+        // recover from a subset of shares
+        let recovered_field_elements = vid.recover_field_elements(&shares[..2]).unwrap();
+        assert_eq!(recovered_field_elements, field_elements);
     }
 }
