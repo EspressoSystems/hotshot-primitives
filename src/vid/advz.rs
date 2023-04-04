@@ -5,10 +5,11 @@ use super::{Vec, VID};
 use ark_bls12_381::Bls12_381;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial};
+use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
 use ark_serialize::CanonicalSerializeHashExt;
 use ark_std::string::ToString;
 use jf_primitives::{
+    erasure_code::{reed_solomon_erasure::ReedSolomonErasureCode, ErasureCode},
     errors::PrimitivesError,
     pcs::{
         prelude::{
@@ -109,33 +110,38 @@ impl VID for Advz {
         let field_elements: Vec<<Bls12_381 as Pairing>::ScalarField> =
             bytes_to_field_elements(payload);
 
-        // TODO for now just put it all in a single polynomial
-        let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
+        // TODO temporary: one polynomial only
+        assert_eq!(field_elements.len(), self.reconstruction_size);
+
+        // TODO random linear combo of polynomials; for now just put it all in a single polynomial
+        // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
+        let polynomial = DensePolynomial::from_coefficients_slice(&field_elements);
 
         // TODO eliminate fully qualified syntax?
         let commitment : <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Commitment = UnivariateKzgPCS::commit(&self.ck, &polynomial)
         .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
 
-        // TODO random linear combo of polynomials
-        // let input =
-        // let foo = polynomial.evaluate();
+        let erasure_code =
+            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
+        let encoded_payload = erasure_code.encode(&field_elements).unwrap();
 
         // TODO range should be roots of unity
-        let output: Vec<Self::Share> = (1..=self.num_storage_nodes)
-            .map(|j| {
-                let id =
-                    <Bls12_381 as Pairing>::ScalarField::from_be_bytes_mod_order(&j.to_be_bytes());
-
-                let chunk = polynomial.evaluate(&id);
+        let output: Vec<Self::Share> = encoded_payload
+            .iter()
+            .map(|chunk| {
+                let id = <Bls12_381 as Pairing>::ScalarField::from(chunk.index as u64);
 
                 // TODO don't unwrap: use `collect` to handle `Result`
                 let (proof, _value) =
                     UnivariateKzgPCS::<Bls12_381>::open(&self.ck, &polynomial, &id).unwrap();
 
+                // TODO only one value for now
+                assert_eq!(chunk.values.len(), 1);
+
                 Share {
-                    id: j,
+                    id: chunk.index,
                     polynomial_commitments: commitment,
-                    encoded_payload: chunk,
+                    encoded_payload: chunk.values[0],
                     proof: proof,
                 }
             })
@@ -188,8 +194,10 @@ mod tests {
     fn basic_correctness() {
         let vid = Advz::new(3, 2).unwrap();
 
-        // let payload = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let payload = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let payload = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30, 31, 32, 33,
+        ];
 
         let shares = vid.disperse(&payload).unwrap();
 

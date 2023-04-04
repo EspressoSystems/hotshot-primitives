@@ -15,7 +15,8 @@ ark-bls12-381 = "0.4.0"
 ark-ec = "0.4.0"
 ark-serialize = "0.4.0"
 ark-ff = "0.4.0"
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
+# jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
+jf-primitives = { path = "../jellyfish/primitives", version = "0.3.0" }
 jf-utils = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 sha2 = { version = "0.10" }
