@@ -151,32 +151,10 @@ impl VID for Advz {
         &self,
         shares: &[Self::Share],
     ) -> Result<Vec<u8>, jf_primitives::errors::PrimitivesError> {
-        if shares.len() < self.reconstruction_size {
-            return Err(PrimitivesError::ParameterError(
-                "not enough shares.".to_string(),
-            ));
-        }
+        let field_elements = self.recover_field_elements(shares)?;
 
-        // TODO check payload commitment
-
-        for s in shares.iter() {
-            self.verify_share(s)?;
-        }
-
-        // assemble shares for erasure code recovery
-        let shards: Vec<_> = shares
-            .iter()
-            .map(|s| ReedSolomonErasureCodeShard {
-                index: s.id,
-                values: vec![s.encoded_payload],
-            })
-            .collect();
-
-        let erasure_code =
-            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
-
-        let field_elements = erasure_code.decode(&shards)?;
-        assert!(field_elements.len() != 0); // TODO compiler pacification
+        // TODO return field_elements_to_bytes
+        assert!(field_elements.len() != 0); // compiler pacification
 
         todo!()
     }
@@ -225,7 +203,40 @@ impl Advz {
 
         Ok(output)
     }
+
+    pub fn recover_field_elements(
+        &self,
+        shares: &[<Advz as VID>::Share],
+    ) -> Result<Vec<<Bls12_381 as Pairing>::ScalarField>, jf_primitives::errors::PrimitivesError>
+    {
+        if shares.len() < self.reconstruction_size {
+            return Err(PrimitivesError::ParameterError(
+                "not enough shares.".to_string(),
+            ));
+        }
+
+        // TODO check payload commitment
+
+        for s in shares.iter() {
+            self.verify_share(s)?;
+        }
+
+        // assemble shares for erasure code recovery
+        let shards: Vec<_> = shares
+            .iter()
+            .map(|s| ReedSolomonErasureCodeShard {
+                index: s.id,
+                values: vec![s.encoded_payload],
+            })
+            .collect();
+
+        let erasure_code =
+            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
+
+        erasure_code.decode(&shards)
+    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
