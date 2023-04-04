@@ -13,6 +13,7 @@ ark-std = { version = "0.4.0", default-features = false }
 ark-poly = "0.4.0"
 ark-bls12-381 = "0.4.0"
 ark-ec = "0.4.0"
+ark-serialize = "0.4.0"
 jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
 jf-utils = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
