@@ -117,41 +117,7 @@ impl VID for Advz {
         // TODO temporary: one polynomial only
         assert_eq!(field_elements.len(), self.reconstruction_size);
 
-        // TODO random linear combo of polynomials; for now just put it all in a single polynomial
-        // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
-        let polynomial = DensePolynomial::from_coefficients_slice(&field_elements);
-
-        // TODO eliminate fully qualified syntax?
-        let commitment : <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Commitment = UnivariateKzgPCS::commit(&self.ck, &polynomial)
-        .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
-
-        let erasure_code =
-            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
-        let encoded_payload = erasure_code.encode(&field_elements).unwrap();
-
-        // TODO range should be roots of unity
-        let output: Vec<Self::Share> = encoded_payload
-            .iter()
-            .map(|chunk| {
-                let id = <Bls12_381 as Pairing>::ScalarField::from(chunk.index as u64);
-
-                // TODO don't unwrap: use `collect` to handle `Result`
-                let (proof, _value) =
-                    UnivariateKzgPCS::<Bls12_381>::open(&self.ck, &polynomial, &id).unwrap();
-
-                // TODO only one value for now
-                assert_eq!(chunk.values.len(), 1);
-
-                Share {
-                    id: chunk.index,
-                    polynomial_commitments: commitment,
-                    encoded_payload: chunk.values[0],
-                    proof: proof,
-                }
-            })
-            .collect();
-
-        Ok(output)
+        self.disperse_field_elements(&field_elements)
     }
 
     fn verify_share(
@@ -216,6 +182,50 @@ impl VID for Advz {
     }
 }
 
+impl Advz {
+    /// Compute shares to send to the storage nodes
+    /// TODO take ownership of payload?
+    pub fn disperse_field_elements(
+        &self,
+        payload: &[<Bls12_381 as Pairing>::ScalarField],
+    ) -> Result<Vec<<Advz as VID>::Share>, PrimitivesError> {
+        // TODO random linear combo of polynomials; for now just put it all in a single polynomial
+        // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
+        let polynomial = DensePolynomial::from_coefficients_slice(&payload);
+
+        // TODO eliminate fully qualified syntax?
+        let commitment : <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Commitment = UnivariateKzgPCS::commit(&self.ck, &polynomial)
+                .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
+
+        let erasure_code =
+            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
+        let encoded_payload = erasure_code.encode(&payload).unwrap();
+
+        // TODO range should be roots of unity
+        let output: Vec<<Advz as VID>::Share> = encoded_payload
+            .iter()
+            .map(|chunk| {
+                let id = <Bls12_381 as Pairing>::ScalarField::from(chunk.index as u64);
+
+                // TODO don't unwrap: use `collect` to handle `Result`
+                let (proof, _value) =
+                    UnivariateKzgPCS::<Bls12_381>::open(&self.ck, &polynomial, &id).unwrap();
+
+                // TODO only one value for now
+                assert_eq!(chunk.values.len(), 1);
+
+                Share {
+                    id: chunk.index,
+                    polynomial_commitments: commitment,
+                    encoded_payload: chunk.values[0],
+                    proof: proof,
+                }
+            })
+            .collect();
+
+        Ok(output)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
