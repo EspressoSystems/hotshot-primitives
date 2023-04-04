@@ -8,8 +8,12 @@ use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
 use ark_serialize::CanonicalSerializeHashExt;
 use ark_std::string::ToString;
+use ark_std::vec;
 use jf_primitives::{
-    erasure_code::{reed_solomon_erasure::ReedSolomonErasureCode, ErasureCode},
+    erasure_code::{
+        reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShard},
+        ErasureCode,
+    },
     errors::PrimitivesError,
     pcs::{
         prelude::{
@@ -179,9 +183,35 @@ impl VID for Advz {
 
     fn recover_payload(
         &self,
-        _shares: &[Self::Share],
+        shares: &[Self::Share],
     ) -> Result<Vec<u8>, jf_primitives::errors::PrimitivesError> {
-        assert!(self.reconstruction_size > 0); // TODO compiler pacification
+        if shares.len() < self.reconstruction_size {
+            return Err(PrimitivesError::ParameterError(
+                "not enough shares.".to_string(),
+            ));
+        }
+
+        // TODO check payload commitment
+
+        for s in shares.iter() {
+            self.verify_share(s)?;
+        }
+
+        // assemble shares for erasure code recovery
+        let shards: Vec<_> = shares
+            .iter()
+            .map(|s| ReedSolomonErasureCodeShard {
+                index: s.id,
+                values: vec![s.encoded_payload],
+            })
+            .collect();
+
+        let erasure_code =
+            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
+
+        let field_elements = erasure_code.decode(&shards)?;
+        assert!(field_elements.len() != 0); // TODO compiler pacification
+
         todo!()
     }
 }
