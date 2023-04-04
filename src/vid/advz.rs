@@ -179,3 +179,22 @@ impl VID for Advz {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic_correctness() {
+        let vid = Advz::new(3, 2).unwrap();
+
+        // let payload = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let payload = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+        let shares = vid.disperse(&payload).unwrap();
+
+        for s in shares.iter() {
+            vid.verify_share(s).unwrap();
+        }
+    }
+}
