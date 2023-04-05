@@ -2,9 +2,7 @@
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
 use super::{Vec, VID};
-use ark_bls12_381::Bls12_381;
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
 use ark_serialize::CanonicalSerializeHashExt;
 use ark_std::string::ToString;
@@ -15,13 +13,7 @@ use jf_primitives::{
         ErasureCode,
     },
     errors::PrimitivesError,
-    pcs::{
-        prelude::{
-            UnivariateKzgPCS, UnivariateProverParam, UnivariateUniversalParams,
-            UnivariateVerifierParam,
-        },
-        PolynomialCommitmentScheme, StructuredReferenceString,
-    },
+    pcs::PolynomialCommitmentScheme,
 };
 use jf_utils::bytes_to_field_elements;
 use jf_utils::test_rng;
@@ -30,15 +22,16 @@ use sha2::{
     Sha256,
 };
 
-pub struct Advz {
+pub struct Advz<P: PolynomialCommitmentScheme<E>, E: Pairing> {
     num_storage_nodes: usize,
     reconstruction_size: usize,
-    // temp_pp: UnivariateUniversalParams<Bls12_381>, // TODO temporary until we have a KZG ceremony
-    ck: UnivariateProverParam<<Bls12_381 as Pairing>::G1Affine>,
-    vk: UnivariateVerifierParam<Bls12_381>,
+    ck: P::ProverParam,
+    vk: P::VerifierParam,
+    // ck: UnivariateProverParam<<Bls12_381 as Pairing>::G1Affine>,
+    // vk: UnivariateVerifierParam<Bls12_381>,
 }
 
-impl Advz {
+impl<P: PolynomialCommitmentScheme<E>, E: Pairing> Advz<P, E> {
     /// TODO we desperately need better error handling
     pub fn new(
         num_storage_nodes: usize,
@@ -49,18 +42,8 @@ impl Advz {
                 "Number of storage nodes must be at least the message length.".to_string(),
             ));
         }
-        let pp = UnivariateUniversalParams::<Bls12_381>::gen_srs_for_testing(
-            &mut test_rng(),
-            reconstruction_size,
-        )
-        .map_err(|_| {
-            PrimitivesError::ParameterError(
-                "Number of storage nodes must be at least the message length.".to_string(),
-            )
-        })?;
-        let (ck, vk) = pp
-            .trim(reconstruction_size)
-            .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
+        let pp = P::gen_srs_for_testing(&mut test_rng(), reconstruction_size).unwrap();
+        let (ck, vk) = P::trim(pp, reconstruction_size, None).unwrap();
 
         Ok(Self {
             num_storage_nodes,
@@ -74,45 +57,49 @@ impl Advz {
 // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
 pub type Commitment = GenericArray<u8, U32>;
 
-pub struct Share {
+pub struct Share<P: PolynomialCommitmentScheme<E>, E: Pairing> {
     id: usize,
 
     // TODO: split `polynomial_commitments` from ShareData to avoid duplicate data?
     // TODO only one commitment for now
-    polynomial_commitments:
-        <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Commitment,
+    polynomial_commitments: P::Commitment,
 
     // TODO only one payload for now
-    encoded_payload:
-        <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Evaluation,
+    // TODO P::Evaluation or E::ScalarField or something else?
+    encoded_payload: P::Evaluation,
 
-    proof: <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Proof,
+    proof: P::Proof,
 }
 
-impl VID for Advz {
+impl<P, E> VID for Advz<P, E>
+where
+    P: PolynomialCommitmentScheme<
+        E,
+        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme<E>>::Evaluation>,
+        Point = <P as PolynomialCommitmentScheme<E>>::Evaluation,
+        Evaluation = E::ScalarField, // TODO because PolynomialCommitmentScheme methods take E::ScalarField instead of P::Evaluation
+    >,
+    E: Pairing,
+{
     type Commitment = Commitment;
-
-    type Share = Share;
+    type Share = Share<P, E>;
 
     fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
         // TODO eliminate fully qualified syntax?
-        let field_elements: Vec<<Bls12_381 as Pairing>::ScalarField> =
-            bytes_to_field_elements(payload);
+        let field_elements: Vec<E::ScalarField> = bytes_to_field_elements(payload);
 
         // TODO for now just put it all in a single polynomial
         let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
 
         // TODO eliminate fully qualified syntax?
-        let commitment : <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Commitment = UnivariateKzgPCS::commit(&self.ck, &polynomial)
-            .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
+        let commitment = P::commit(&self.ck, &(polynomial as P::Polynomial)).unwrap();
 
         Ok(commitment.hash_uncompressed::<Sha256>())
     }
 
     fn disperse(&self, payload: &[u8]) -> Result<Vec<Self::Share>, PrimitivesError> {
         // TODO eliminate fully qualified syntax?
-        let field_elements: Vec<<Bls12_381 as Pairing>::ScalarField> =
-            bytes_to_field_elements(payload);
+        let field_elements: Vec<P::Evaluation> = bytes_to_field_elements(payload);
 
         // TODO temporary: one polynomial only
         assert_eq!(field_elements.len(), self.reconstruction_size);
@@ -124,13 +111,12 @@ impl VID for Advz {
         &self,
         share: &Self::Share,
     ) -> Result<(), jf_primitives::errors::PrimitivesError> {
-        let id =
-            <Bls12_381 as Pairing>::ScalarField::from_be_bytes_mod_order(&share.id.to_be_bytes());
+        let id: P::Point = P::Point::from(share.id as u64);
 
         // TODO value = random lin combo of payloads
         let value = share.encoded_payload.clone();
 
-        let success = UnivariateKzgPCS::<Bls12_381>::verify(
+        let success = P::verify(
             &self.vk,
             &share.polynomial_commitments,
             &id,
@@ -160,41 +146,54 @@ impl VID for Advz {
     }
 }
 
-impl Advz {
+impl<P, E> Advz<P, E>
+where
+    P: PolynomialCommitmentScheme<
+        E,
+        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme<E>>::Evaluation>,
+        Point = <P as PolynomialCommitmentScheme<E>>::Evaluation,
+        Evaluation = E::ScalarField, // TODO because PolynomialCommitmentScheme methods take E::ScalarField instead of P::Evaluation
+    >,
+    E: Pairing,
+{
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
     pub fn disperse_field_elements(
         &self,
-        payload: &[<Bls12_381 as Pairing>::ScalarField],
-    ) -> Result<Vec<<Advz as VID>::Share>, PrimitivesError> {
+        payload: &[P::Evaluation],
+    ) -> Result<Vec<<Advz<P, E> as VID>::Share>, PrimitivesError> {
         // TODO random linear combo of polynomials; for now just put it all in a single polynomial
         // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
         let polynomial = DensePolynomial::from_coefficients_slice(&payload);
 
         // TODO eliminate fully qualified syntax?
-        let commitment : <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme<Bls12_381>>::Commitment = UnivariateKzgPCS::commit(&self.ck, &polynomial)
-                .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
+        let commitment = P::commit(&self.ck, &polynomial)
+            .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
 
         let erasure_code =
             ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
         let encoded_payload = erasure_code.encode(&payload).unwrap();
 
         // TODO range should be roots of unity
-        let output: Vec<<Advz as VID>::Share> = encoded_payload
+        let output: Vec<<Advz<P, E> as VID>::Share> = encoded_payload
             .iter()
             .map(|chunk| {
-                let id = <Bls12_381 as Pairing>::ScalarField::from(chunk.index as u64);
+                let id = P::Point::from(chunk.index as u64);
+                // let id = chunk.index;
 
                 // TODO don't unwrap: use `collect` to handle `Result`
-                let (proof, _value) =
-                    UnivariateKzgPCS::<Bls12_381>::open(&self.ck, &polynomial, &id).unwrap();
+                let (proof, _value) = P::open(&self.ck, &polynomial, &id).unwrap();
 
                 // TODO only one value for now
                 assert_eq!(chunk.values.len(), 1);
 
+                // let p = P::Evaluation::from_base_prime_field(id);
+                // let p: <P::Evaluation as Field>::BasePrimeField::from(chunk.values[0]);
+                // let f: P::Evaluation = <P::Evaluation as Field>::from_base_prime_field(p);
+
                 Share {
                     id: chunk.index,
-                    polynomial_commitments: commitment,
+                    polynomial_commitments: commitment.clone(),
                     encoded_payload: chunk.values[0],
                     proof: proof,
                 }
@@ -206,9 +205,8 @@ impl Advz {
 
     pub fn recover_field_elements(
         &self,
-        shares: &[<Advz as VID>::Share],
-    ) -> Result<Vec<<Bls12_381 as Pairing>::ScalarField>, jf_primitives::errors::PrimitivesError>
-    {
+        shares: &[<Advz<P, E> as VID>::Share],
+    ) -> Result<Vec<P::Evaluation>, jf_primitives::errors::PrimitivesError> {
         if shares.len() < self.reconstruction_size {
             return Err(PrimitivesError::ParameterError(
                 "not enough shares.".to_string(),
@@ -239,11 +237,14 @@ impl Advz {
 
 #[cfg(test)]
 mod tests {
+    use ark_bls12_381::Bls12_381;
+    use jf_primitives::pcs::prelude::UnivariateKzgPCS;
+
     use super::*;
 
     #[test]
     fn basic_correctness() {
-        let vid = Advz::new(3, 2).unwrap();
+        let vid = Advz::<UnivariateKzgPCS<Bls12_381>, Bls12_381>::new(3, 2).unwrap();
 
         let payload = [
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
@@ -260,7 +261,7 @@ mod tests {
 
     #[test]
     fn basic_correctness_field_elements() {
-        let vid = Advz::new(3, 2).unwrap();
+        let vid = Advz::<UnivariateKzgPCS<Bls12_381>, Bls12_381>::new(3, 2).unwrap();
 
         let field_elements = [
             <Bls12_381 as Pairing>::ScalarField::from(7u64),
