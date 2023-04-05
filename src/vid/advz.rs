@@ -2,7 +2,7 @@
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
 use super::{Vec, VID};
-use ark_ec::pairing::Pairing;
+use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
 use ark_serialize::CanonicalSerializeHashExt;
 use ark_std::string::ToString;
@@ -22,7 +22,7 @@ use sha2::{
     Sha256,
 };
 
-pub struct Advz<P: PolynomialCommitmentScheme<E>, E: Pairing> {
+pub struct Advz<P: PolynomialCommitmentScheme> {
     num_storage_nodes: usize,
     reconstruction_size: usize,
     ck: P::ProverParam,
@@ -31,7 +31,7 @@ pub struct Advz<P: PolynomialCommitmentScheme<E>, E: Pairing> {
     // vk: UnivariateVerifierParam<Bls12_381>,
 }
 
-impl<P: PolynomialCommitmentScheme<E>, E: Pairing> Advz<P, E> {
+impl<P: PolynomialCommitmentScheme> Advz<P> {
     /// TODO we desperately need better error handling
     pub fn new(
         num_storage_nodes: usize,
@@ -57,7 +57,7 @@ impl<P: PolynomialCommitmentScheme<E>, E: Pairing> Advz<P, E> {
 // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
 pub type Commitment = GenericArray<u8, U32>;
 
-pub struct Share<P: PolynomialCommitmentScheme<E>, E: Pairing> {
+pub struct Share<P: PolynomialCommitmentScheme> {
     id: usize,
 
     // TODO: split `polynomial_commitments` from ShareData to avoid duplicate data?
@@ -71,22 +71,20 @@ pub struct Share<P: PolynomialCommitmentScheme<E>, E: Pairing> {
     proof: P::Proof,
 }
 
-impl<P, E> VID for Advz<P, E>
+impl<P> VID for Advz<P>
 where
     P: PolynomialCommitmentScheme<
-        E,
-        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme<E>>::Evaluation>,
-        Point = <P as PolynomialCommitmentScheme<E>>::Evaluation,
-        Evaluation = E::ScalarField, // TODO because PolynomialCommitmentScheme methods take E::ScalarField instead of P::Evaluation
+        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme>::Evaluation>,
+        Point = <P as PolynomialCommitmentScheme>::Evaluation,
     >,
-    E: Pairing,
+    <P as PolynomialCommitmentScheme>::Evaluation: PrimeField, // TODO get rid of Primefield?
 {
     type Commitment = Commitment;
-    type Share = Share<P, E>;
+    type Share = Share<P>;
 
     fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
         // TODO eliminate fully qualified syntax?
-        let field_elements: Vec<E::ScalarField> = bytes_to_field_elements(payload);
+        let field_elements = bytes_to_field_elements(payload);
 
         // TODO for now just put it all in a single polynomial
         let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
@@ -146,22 +144,20 @@ where
     }
 }
 
-impl<P, E> Advz<P, E>
+impl<P> Advz<P>
 where
     P: PolynomialCommitmentScheme<
-        E,
-        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme<E>>::Evaluation>,
-        Point = <P as PolynomialCommitmentScheme<E>>::Evaluation,
-        Evaluation = E::ScalarField, // TODO because PolynomialCommitmentScheme methods take E::ScalarField instead of P::Evaluation
+        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme>::Evaluation>,
+        Point = <P as PolynomialCommitmentScheme>::Evaluation,
     >,
-    E: Pairing,
+    <P as PolynomialCommitmentScheme>::Evaluation: PrimeField, // TODO get rid of Primefield?
 {
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
     pub fn disperse_field_elements(
         &self,
         payload: &[P::Evaluation],
-    ) -> Result<Vec<<Advz<P, E> as VID>::Share>, PrimitivesError> {
+    ) -> Result<Vec<<Advz<P> as VID>::Share>, PrimitivesError> {
         // TODO random linear combo of polynomials; for now just put it all in a single polynomial
         // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
         let polynomial = DensePolynomial::from_coefficients_slice(&payload);
@@ -175,7 +171,7 @@ where
         let encoded_payload = erasure_code.encode(&payload).unwrap();
 
         // TODO range should be roots of unity
-        let output: Vec<<Advz<P, E> as VID>::Share> = encoded_payload
+        let output: Vec<<Advz<P> as VID>::Share> = encoded_payload
             .iter()
             .map(|chunk| {
                 let id = P::Point::from(chunk.index as u64);
@@ -205,7 +201,7 @@ where
 
     pub fn recover_field_elements(
         &self,
-        shares: &[<Advz<P, E> as VID>::Share],
+        shares: &[<Advz<P> as VID>::Share],
     ) -> Result<Vec<P::Evaluation>, jf_primitives::errors::PrimitivesError> {
         if shares.len() < self.reconstruction_size {
             return Err(PrimitivesError::ParameterError(
@@ -244,7 +240,7 @@ mod tests {
 
     #[test]
     fn basic_correctness() {
-        let vid = Advz::<UnivariateKzgPCS<Bls12_381>, Bls12_381>::new(3, 2).unwrap();
+        let vid = Advz::<UnivariateKzgPCS<Bls12_381>>::new(3, 2).unwrap();
 
         let payload = [
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
@@ -261,11 +257,11 @@ mod tests {
 
     #[test]
     fn basic_correctness_field_elements() {
-        let vid = Advz::<UnivariateKzgPCS<Bls12_381>, Bls12_381>::new(3, 2).unwrap();
+        let vid = Advz::<UnivariateKzgPCS<Bls12_381>>::new(3, 2).unwrap();
 
         let field_elements = [
-            <Bls12_381 as Pairing>::ScalarField::from(7u64),
-            <Bls12_381 as Pairing>::ScalarField::from(13u64),
+            <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation::from(7u64),
+            <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation::from(13u64),
         ];
 
         let shares = vid.disperse_field_elements(&field_elements).unwrap();
