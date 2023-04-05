@@ -90,7 +90,7 @@ where
         let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
 
         // TODO eliminate fully qualified syntax?
-        let commitment = P::commit(&self.ck, &(polynomial as P::Polynomial)).unwrap();
+        let commitment = P::commit(&self.ck, &polynomial).unwrap();
 
         Ok(commitment.hash_uncompressed::<Sha256>())
     }
