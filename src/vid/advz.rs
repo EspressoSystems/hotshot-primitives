@@ -6,12 +6,9 @@ use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
 use ark_serialize::CanonicalSerializeHashExt;
 use ark_std::string::ToString;
-use ark_std::vec;
+
 use jf_primitives::{
-    erasure_code::{
-        reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShard},
-        ErasureCode,
-    },
+    erasure_code::{reed_solomon_erasure::ReedSolomonErasureCodeShard, ErasureCode},
     errors::PrimitivesError,
     pcs::PolynomialCommitmentScheme,
 };
@@ -22,32 +19,36 @@ use sha2::{
     Sha256,
 };
 
-pub struct Advz<P: PolynomialCommitmentScheme> {
-    num_storage_nodes: usize,
-    reconstruction_size: usize,
+pub struct Advz<P, C>
+where
+    P: PolynomialCommitmentScheme,
+    C: ErasureCode,
+{
+    // num_storage_nodes: usize,
+    // reconstruction_size: usize,
+    erasure_code: C,
     ck: P::ProverParam,
     vk: P::VerifierParam,
     // ck: UnivariateProverParam<<Bls12_381 as Pairing>::G1Affine>,
     // vk: UnivariateVerifierParam<Bls12_381>,
 }
 
-impl<P: PolynomialCommitmentScheme> Advz<P> {
+impl<P, C> Advz<P, C>
+where
+    P: PolynomialCommitmentScheme,
+    C: ErasureCode,
+{
     /// TODO we desperately need better error handling
     pub fn new(
         num_storage_nodes: usize,
         reconstruction_size: usize,
     ) -> Result<Self, PrimitivesError> {
-        if reconstruction_size > num_storage_nodes {
-            return Err(PrimitivesError::ParameterError(
-                "Number of storage nodes must be at least the message length.".to_string(),
-            ));
-        }
+        let erasure_code = C::new(reconstruction_size, num_storage_nodes).unwrap();
         let pp = P::gen_srs_for_testing(&mut test_rng(), reconstruction_size).unwrap();
         let (ck, vk) = P::trim(pp, reconstruction_size, None).unwrap();
 
         Ok(Self {
-            num_storage_nodes,
-            reconstruction_size,
+            erasure_code,
             ck,
             vk,
         })
@@ -57,30 +58,35 @@ impl<P: PolynomialCommitmentScheme> Advz<P> {
 // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
 pub type Commitment = GenericArray<u8, U32>;
 
-pub struct Share<P: PolynomialCommitmentScheme> {
-    id: usize,
-
+pub struct Share<P, C>
+where
+    P: PolynomialCommitmentScheme,
+    C: ErasureCode,
+{
     // TODO: split `polynomial_commitments` from ShareData to avoid duplicate data?
     // TODO only one commitment for now
     polynomial_commitments: P::Commitment,
 
     // TODO only one payload for now
-    // TODO P::Evaluation or E::ScalarField or something else?
-    encoded_payload: P::Evaluation,
+    encoded_payload: C::Shard,
 
     proof: P::Proof,
 }
 
-impl<P> VID for Advz<P>
+impl<P, C> VID for Advz<P, C>
 where
     P: PolynomialCommitmentScheme<
         Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme>::Evaluation>,
         Point = <P as PolynomialCommitmentScheme>::Evaluation,
     >,
     <P as PolynomialCommitmentScheme>::Evaluation: PrimeField, // TODO get rid of Primefield?
+    C: ErasureCode<
+        Field = <P as PolynomialCommitmentScheme>::Evaluation,
+        Shard = ReedSolomonErasureCodeShard<<C as ErasureCode>::Field>, // TODO for now hard-code shard type; need access to (index, value)
+    >,
 {
     type Commitment = Commitment;
-    type Share = Share<P>;
+    type Share = Share<P, C>;
 
     fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
         // TODO eliminate fully qualified syntax?
@@ -100,7 +106,7 @@ where
         let field_elements: Vec<P::Evaluation> = bytes_to_field_elements(payload);
 
         // TODO temporary: one polynomial only
-        assert_eq!(field_elements.len(), self.reconstruction_size);
+        // assert_eq!(field_elements.len(), self.reconstruction_size);
 
         self.disperse_field_elements(&field_elements)
     }
@@ -109,10 +115,11 @@ where
         &self,
         share: &Self::Share,
     ) -> Result<(), jf_primitives::errors::PrimitivesError> {
-        let id: P::Point = P::Point::from(share.id as u64);
+        let id: P::Point = P::Point::from(share.encoded_payload.index as u64);
 
         // TODO value = random lin combo of payloads
-        let value = share.encoded_payload.clone();
+        // TODO for now assume there's only 1 value in the shard
+        let value = share.encoded_payload.values[0];
 
         let success = P::verify(
             &self.vk,
@@ -144,20 +151,24 @@ where
     }
 }
 
-impl<P> Advz<P>
+impl<P, C> Advz<P, C>
 where
     P: PolynomialCommitmentScheme<
         Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme>::Evaluation>,
         Point = <P as PolynomialCommitmentScheme>::Evaluation,
     >,
     <P as PolynomialCommitmentScheme>::Evaluation: PrimeField, // TODO get rid of Primefield?
+    C: ErasureCode<
+        Field = <P as PolynomialCommitmentScheme>::Evaluation,
+        Shard = ReedSolomonErasureCodeShard<<C as ErasureCode>::Field>, // TODO for now hard-code shard type; need access to (index, value)
+    >,
 {
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
     pub fn disperse_field_elements(
         &self,
         payload: &[P::Evaluation],
-    ) -> Result<Vec<<Advz<P> as VID>::Share>, PrimitivesError> {
+    ) -> Result<Vec<<Advz<P, C> as VID>::Share>, PrimitivesError> {
         // TODO random linear combo of polynomials; for now just put it all in a single polynomial
         // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
         let polynomial = DensePolynomial::from_coefficients_slice(&payload);
@@ -166,13 +177,11 @@ where
         let commitment = P::commit(&self.ck, &polynomial)
             .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
 
-        let erasure_code =
-            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
-        let encoded_payload = erasure_code.encode(&payload).unwrap();
+        let encoded_payload = self.erasure_code.encode(payload).unwrap();
 
         // TODO range should be roots of unity
-        let output: Vec<<Advz<P> as VID>::Share> = encoded_payload
-            .iter()
+        let output: Vec<<Advz<P, C> as VID>::Share> = encoded_payload
+            .into_iter()
             .map(|chunk| {
                 let id = P::Point::from(chunk.index as u64);
                 // let id = chunk.index;
@@ -188,9 +197,8 @@ where
                 // let f: P::Evaluation = <P::Evaluation as Field>::from_base_prime_field(p);
 
                 Share {
-                    id: chunk.index,
                     polynomial_commitments: commitment.clone(),
-                    encoded_payload: chunk.values[0],
+                    encoded_payload: chunk,
                     proof: proof,
                 }
             })
@@ -201,13 +209,14 @@ where
 
     pub fn recover_field_elements(
         &self,
-        shares: &[<Advz<P> as VID>::Share],
+        shares: &[<Advz<P, C> as VID>::Share],
     ) -> Result<Vec<P::Evaluation>, jf_primitives::errors::PrimitivesError> {
-        if shares.len() < self.reconstruction_size {
-            return Err(PrimitivesError::ParameterError(
-                "not enough shares.".to_string(),
-            ));
-        }
+        // TODO this check is done in the ErasureCode
+        // if shares.len() < self.reconstruction_size {
+        //     return Err(PrimitivesError::ParameterError(
+        //         "not enough shares.".to_string(),
+        //     ));
+        // }
 
         // TODO check payload commitment
 
@@ -216,31 +225,27 @@ where
         }
 
         // assemble shares for erasure code recovery
-        let shards: Vec<_> = shares
-            .iter()
-            .map(|s| ReedSolomonErasureCodeShard {
-                index: s.id,
-                values: vec![s.encoded_payload],
-            })
-            .collect();
+        // TODO wasteful clone to turn [Share] into [Shard]
+        let shards: Vec<_> = shares.iter().map(|s| s.encoded_payload.clone()).collect();
 
-        let erasure_code =
-            ReedSolomonErasureCode::new(self.reconstruction_size, self.num_storage_nodes).unwrap();
-
-        erasure_code.decode(&shards)
+        self.erasure_code.decode(&shards)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use ark_bls12_381::Bls12_381;
-    use jf_primitives::pcs::prelude::UnivariateKzgPCS;
+    use jf_primitives::{
+        erasure_code::reed_solomon_erasure::ReedSolomonErasureCode, pcs::prelude::UnivariateKzgPCS,
+    };
 
     use super::*;
+    type PCS = UnivariateKzgPCS<Bls12_381>;
+    type Code = ReedSolomonErasureCode<<PCS as PolynomialCommitmentScheme>::Evaluation>;
 
     #[test]
     fn basic_correctness() {
-        let vid = Advz::<UnivariateKzgPCS<Bls12_381>>::new(3, 2).unwrap();
+        let vid = Advz::<PCS, Code>::new(3, 2).unwrap();
 
         let payload = [
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
@@ -257,7 +262,7 @@ mod tests {
 
     #[test]
     fn basic_correctness_field_elements() {
-        let vid = Advz::<UnivariateKzgPCS<Bls12_381>>::new(3, 2).unwrap();
+        let vid = Advz::<PCS, Code>::new(3, 2).unwrap();
 
         let field_elements = [
             <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation::from(7u64),
