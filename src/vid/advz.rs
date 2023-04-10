@@ -225,7 +225,7 @@ where
         }
 
         // assemble shares for erasure code recovery
-        // TODO wasteful clone to turn [Share] into [Shard]
+        // TODO wasteful clone to turn [Share] into [Shard]; instead `decode` should take `IntoIterator` over shards
         let shards: Vec<_> = shares.iter().map(|s| s.encoded_payload.clone()).collect();
 
         self.erasure_code.decode(&shards)
