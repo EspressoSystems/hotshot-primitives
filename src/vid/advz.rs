@@ -3,7 +3,7 @@
 
 use super::{Vec, VID};
 use ark_ff::PrimeField;
-use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
+use ark_poly::DenseUVPolynomial;
 use ark_serialize::CanonicalSerializeHashExt;
 use ark_std::string::ToString;
 
@@ -72,11 +72,9 @@ where
 
 impl<P> VID for Advz<P>
 where
-    P: PolynomialCommitmentScheme<
-        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme>::Evaluation>,
-        Point = <P as PolynomialCommitmentScheme>::Evaluation,
-    >,
-    <P as PolynomialCommitmentScheme>::Evaluation: PrimeField, // TODO get rid of Primefield?
+    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P::Polynomial: DenseUVPolynomial<P::Evaluation>,
+    P::Evaluation: PrimeField, // TODO get rid of Primefield?
 {
     type Commitment = Commitment;
     type Share = Share<P>;
@@ -86,7 +84,7 @@ where
         let field_elements = bytes_to_field_elements(payload);
 
         // TODO for now just put it all in a single polynomial
-        let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
+        let polynomial = DenseUVPolynomial::from_coefficients_vec(field_elements);
 
         // TODO eliminate fully qualified syntax?
         let commitment = P::commit(&self.ck, &polynomial).unwrap();
@@ -145,11 +143,9 @@ where
 
 impl<P> Advz<P>
 where
-    P: PolynomialCommitmentScheme<
-        Polynomial = DensePolynomial<<P as PolynomialCommitmentScheme>::Evaluation>,
-        Point = <P as PolynomialCommitmentScheme>::Evaluation,
-    >,
-    <P as PolynomialCommitmentScheme>::Evaluation: PrimeField, // TODO get rid of Primefield?
+    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P::Polynomial: DenseUVPolynomial<P::Evaluation>,
+    P::Evaluation: PrimeField, // TODO get rid of Primefield?
 {
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
@@ -159,7 +155,7 @@ where
     ) -> Result<Vec<<Advz<P> as VID>::Share>, PrimitivesError> {
         // TODO random linear combo of polynomials; for now just put it all in a single polynomial
         // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
-        let polynomial = DensePolynomial::from_coefficients_slice(&payload);
+        let polynomial = DenseUVPolynomial::from_coefficients_slice(&payload);
 
         // TODO eliminate fully qualified syntax?
         let commitment = P::commit(&self.ck, &polynomial)
