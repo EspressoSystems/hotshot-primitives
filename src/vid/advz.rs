@@ -2,10 +2,9 @@
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
 use super::{Vec, VID};
-use ark_ff::PrimeField;
 use ark_poly::DenseUVPolynomial;
 use ark_serialize::CanonicalSerializeHashExt;
-use ark_std::string::ToString;
+use ark_std::{format, string::ToString};
 
 use jf_primitives::{
     erasure_code::{
@@ -26,7 +25,8 @@ pub struct Advz<P>
 where
     P: PolynomialCommitmentScheme,
 {
-    erasure_code: ReedSolomonErasureCode<P::Evaluation>,
+    reconstruction_size: usize,
+    num_storage_nodes: usize,
     ck: P::ProverParam,
     vk: P::VerifierParam,
 }
@@ -37,16 +37,20 @@ where
 {
     /// TODO we desperately need better error handling
     pub fn new(
-        num_storage_nodes: usize,
         reconstruction_size: usize,
+        num_storage_nodes: usize,
     ) -> Result<Self, PrimitivesError> {
-        let erasure_code =
-            ReedSolomonErasureCode::new(reconstruction_size, num_storage_nodes).unwrap();
+        if num_storage_nodes < reconstruction_size {
+            return Err(PrimitivesError::ParameterError(format!(
+                "reconstruction_size {} exceeds num_storage_nodes {}",
+                reconstruction_size, num_storage_nodes
+            )));
+        }
         let pp = P::gen_srs_for_testing(&mut test_rng(), reconstruction_size).unwrap();
         let (ck, vk) = P::trim(pp, reconstruction_size, None).unwrap();
-
         Ok(Self {
-            erasure_code,
+            reconstruction_size,
+            num_storage_nodes,
             ck,
             vk,
         })
@@ -74,7 +78,6 @@ impl<P> VID for Advz<P>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
-    P::Evaluation: PrimeField, // TODO get rid of Primefield?
 {
     type Commitment = Commitment;
     type Share = Share<P>;
@@ -145,7 +148,6 @@ impl<P> Advz<P>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
-    P::Evaluation: PrimeField, // TODO get rid of Primefield?
 {
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
@@ -161,7 +163,11 @@ where
         let commitment = P::commit(&self.ck, &polynomial)
             .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
 
-        let encoded_payload = self.erasure_code.encode(payload).unwrap();
+        let encoded_payload = ReedSolomonErasureCode::encode(
+            payload,
+            self.num_storage_nodes - self.reconstruction_size,
+        )
+        .unwrap();
 
         // TODO range should be roots of unity
         let output: Vec<<Advz<P> as VID>::Share> = encoded_payload
@@ -187,13 +193,10 @@ where
     pub fn recover_field_elements(
         &self,
         shares: &[<Advz<P> as VID>::Share],
-    ) -> Result<Vec<P::Evaluation>, jf_primitives::errors::PrimitivesError> {
-        // TODO this check is done in the ErasureCode
-        // if shares.len() < self.reconstruction_size {
-        //     return Err(PrimitivesError::ParameterError(
-        //         "not enough shares.".to_string(),
-        //     ));
-        // }
+    ) -> Result<Vec<P::Evaluation>, PrimitivesError> {
+        if shares.len() < self.reconstruction_size {
+            return Err(PrimitivesError::ParameterError("not enough shares.".into()));
+        }
 
         // TODO check payload commitment
 
@@ -205,7 +208,7 @@ where
         // TODO wasteful clone to turn [Share] into [Shard]; instead `decode` should take `IntoIterator` over shards
         let shards: Vec<_> = shares.iter().map(|s| s.encoded_payload.clone()).collect();
 
-        self.erasure_code.decode(&shards)
+        ReedSolomonErasureCode::decode(&shards, self.reconstruction_size)
     }
 }
 
@@ -219,12 +222,11 @@ mod tests {
 
     #[test]
     fn basic_correctness() {
-        let vid = Advz::<PCS>::new(3, 2).unwrap();
+        let vid = Advz::<PCS>::new(2, 3).unwrap();
 
-        let payload = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 32, 33,
-        ];
+        // choose payload len to produce the correct number of shares
+        // TODO `disperse` should do this automatically
+        let payload = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 
         let shares = vid.disperse(&payload).unwrap();
         assert_eq!(shares.len(), 3);
@@ -236,7 +238,7 @@ mod tests {
 
     #[test]
     fn basic_correctness_field_elements() {
-        let vid = Advz::<PCS>::new(3, 2).unwrap();
+        let vid = Advz::<PCS>::new(2, 3).unwrap();
 
         let field_elements = [
             <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation::from(7u64),
