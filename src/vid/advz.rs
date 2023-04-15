@@ -8,7 +8,7 @@ use ark_std::{format, string::ToString};
 
 use jf_primitives::{
     erasure_code::{
-        reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShard},
+        reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
     errors::PrimitivesError,
@@ -69,7 +69,7 @@ where
     polynomial_commitments: P::Commitment,
 
     // TODO only one payload for now
-    encoded_payload: ReedSolomonErasureCodeShard<P::Evaluation>,
+    encoded_payload: ReedSolomonErasureCodeShare<P::Evaluation>,
 
     proof: P::Proof,
 }
@@ -204,11 +204,10 @@ where
             self.verify_share(s)?;
         }
 
-        // assemble shares for erasure code recovery
-        // TODO wasteful clone to turn [Share] into [Shard]; instead `decode` should take `IntoIterator` over shards
-        let shards: Vec<_> = shares.iter().map(|s| s.encoded_payload.clone()).collect();
-
-        ReedSolomonErasureCode::decode(&shards, self.reconstruction_size)
+        ReedSolomonErasureCode::decode(
+            shares.iter().map(|s| &s.encoded_payload),
+            self.reconstruction_size,
+        )
     }
 }
 
