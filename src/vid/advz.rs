@@ -4,7 +4,7 @@
 use super::VID;
 use ark_poly::DenseUVPolynomial;
 use ark_serialize::CanonicalSerialize;
-use ark_std::{format, string::ToString, vec, vec::Vec};
+use ark_std::{format, vec, vec::Vec};
 
 use jf_primitives::{
     erasure_code::{
@@ -116,23 +116,21 @@ where
         let id: P::Point = P::Point::from(share.id as u64);
 
         // TODO value = random lin combo of payloads
-        let value = share.encoded_data[0];
-
-        let success = P::verify(
-            &self.vk,
-            &share.polynomial_commitments[0],
-            &id,
-            &value,
-            &share.proof[0],
-        )
-        .unwrap();
-
-        match success {
-            true => Ok(()),
-            false => Err(PrimitivesError::ParameterError(
-                "why am i fighting this.".to_string(),
-            )),
+        assert_eq!(share.encoded_data.len(), share.proof.len());
+        for ((data, proof), comm) in share
+            .encoded_data
+            .iter()
+            .zip(share.proof.iter())
+            .zip(share.polynomial_commitments.iter())
+        {
+            let success = P::verify(&self.vk, &comm, &id, &data, &proof).unwrap();
+            if !success {
+                return Err(PrimitivesError::VerificationError(
+                    "verification failed".into(),
+                ));
+            }
         }
+        Ok(())
     }
 
     fn recover_payload(
