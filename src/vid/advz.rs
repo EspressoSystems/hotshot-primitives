@@ -14,8 +14,8 @@ use jf_primitives::{
     errors::PrimitivesError,
     pcs::PolynomialCommitmentScheme,
 };
-use jf_utils::bytes_to_field_elements;
 use jf_utils::test_rng;
+use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 use sha2::{
     digest::generic_array::{typenum::U32, GenericArray},
     Digest, Sha256,
@@ -138,11 +138,7 @@ where
         shares: &[Self::Share],
     ) -> Result<Vec<u8>, jf_primitives::errors::PrimitivesError> {
         let field_elements = self.recover_field_elements(shares)?;
-
-        // TODO return field_elements_to_bytes
-        assert!(field_elements.len() != 0); // compiler pacification
-
-        todo!()
+        Ok(bytes_from_field_elements(field_elements).unwrap())
     }
 }
 
@@ -247,6 +243,10 @@ mod tests {
         for s in shares.iter() {
             vid.verify_share(s).unwrap();
         }
+
+        // recover from a subset of shares
+        let recovered_bytes = vid.recover_payload(&shares[..2]).unwrap();
+        assert_eq!(recovered_bytes, payload);
     }
 
     #[test]
