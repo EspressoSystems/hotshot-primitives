@@ -159,40 +159,47 @@ where
         &self,
         payload: &[P::Evaluation],
     ) -> Result<Vec<<Advz<P> as VID>::Share>, PrimitivesError> {
-        // TODO random linear combo of polynomials; for now just put it all in a single polynomial
-        // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
-        let polynomial = DenseUVPolynomial::from_coefficients_slice(payload);
+        // TODO make this idiomatic and memory efficient
+        let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
+        let mut polys = Vec::with_capacity(num_polys);
+        let mut commitments = Vec::with_capacity(num_polys);
+        let mut encoded_data = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+        let mut proofs = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+        for coeffs in payload.chunks(self.reconstruction_size) {
+            let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
+            let commitment = P::commit(&self.ck, &poly).unwrap();
 
-        // TODO eliminate fully qualified syntax?
-        let commitment = P::commit(&self.ck, &polynomial)
-            .map_err(|_| PrimitivesError::ParameterError("why am i fighting this.".to_string()))?;
+            // TODO use batch_open_fk23
+            for index in 0..self.num_storage_nodes {
+                let id = P::Point::from((index + 1) as u64);
+                let (proof, value) = P::open(&self.ck, &poly, &id).unwrap();
+                encoded_data[index].push(value);
+                proofs[index].push(proof);
+            }
 
-        let encoded_payload = ReedSolomonErasureCode::encode(
-            payload,
-            self.num_storage_nodes - self.reconstruction_size,
-        )
-        .unwrap();
+            polys.push(poly);
+            commitments.push(commitment);
+        }
+        assert_eq!(polys.len(), num_polys);
+        assert_eq!(commitments.len(), num_polys);
+        assert_eq!(encoded_data.len(), self.num_storage_nodes);
+        assert_eq!(proofs.len(), self.num_storage_nodes);
+        for (v, p) in encoded_data.iter().zip(proofs.iter()) {
+            assert_eq!(v.len(), num_polys);
+            assert_eq!(p.len(), num_polys);
+        }
 
-        // TODO range should be roots of unity
-        let output: Vec<<Advz<P> as VID>::Share> = encoded_payload
+        Ok(encoded_data
             .into_iter()
-            .map(|chunk| {
-                let id = P::Point::from(chunk.index as u64);
-                // let id = chunk.index;
-
-                // TODO don't unwrap: use `collect` to handle `Result`
-                let (proof, _value) = P::open(&self.ck, &polynomial, &id).unwrap();
-
-                Share {
-                    polynomial_commitments: vec![commitment.clone()],
-                    encoded_data: vec![chunk.value],
-                    proof: vec![proof],
-                    id: chunk.index,
-                }
+            .zip(proofs.into_iter())
+            .enumerate()
+            .map(|(i, (data, proof))| Share {
+                polynomial_commitments: commitments.clone(),
+                id: i + 1,
+                encoded_data: data,
+                proof,
             })
-            .collect();
-
-        Ok(output)
+            .collect())
     }
 
     pub fn recover_field_elements(
