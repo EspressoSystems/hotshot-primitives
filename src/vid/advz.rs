@@ -1,10 +1,10 @@
 //! Implementation of VID from https://eprint.iacr.org/2021/1500
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
-use super::{Vec, VID};
+use super::VID;
 use ark_poly::DenseUVPolynomial;
 use ark_serialize::CanonicalSerialize;
-use ark_std::{format, string::ToString};
+use ark_std::{format, string::ToString, vec, vec::Vec};
 
 use jf_primitives::{
     erasure_code::{
@@ -27,6 +27,8 @@ where
 {
     reconstruction_size: usize,
     num_storage_nodes: usize,
+    // ck: <P::SRS as StructuredReferenceString>::ProverParam,
+    // vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     ck: P::ProverParam,
     vk: P::VerifierParam,
 }
@@ -68,8 +70,8 @@ where
     // TODO only one commitment for now
     polynomial_commitments: P::Commitment,
 
-    // TODO only one payload for now
-    encoded_payload: ReedSolomonErasureCodeShare<P::Evaluation>,
+    id: usize,
+    encoded_data: Vec<P::Evaluation>,
 
     proof: P::Proof,
 }
@@ -111,10 +113,10 @@ where
         &self,
         share: &Self::Share,
     ) -> Result<(), jf_primitives::errors::PrimitivesError> {
-        let id: P::Point = P::Point::from(share.encoded_payload.index as u64);
+        let id: P::Point = P::Point::from(share.id as u64);
 
         // TODO value = random lin combo of payloads
-        let value = share.encoded_payload.value;
+        let value = share.encoded_data[0];
 
         let success = P::verify(
             &self.vk,
@@ -183,8 +185,9 @@ where
 
                 Share {
                     polynomial_commitments: commitment.clone(),
-                    encoded_payload: chunk,
+                    encoded_data: vec![chunk.value],
                     proof: proof,
+                    id: chunk.index,
                 }
             })
             .collect();
@@ -207,7 +210,10 @@ where
         }
 
         ReedSolomonErasureCode::decode(
-            shares.iter().map(|s| &s.encoded_payload),
+            shares.iter().map(|s| ReedSolomonErasureCodeShare {
+                index: s.id,
+                value: s.encoded_data[0],
+            }),
             self.reconstruction_size,
         )
     }
