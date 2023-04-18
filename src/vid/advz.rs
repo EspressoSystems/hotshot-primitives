@@ -3,7 +3,7 @@
 
 use super::{Vec, VID};
 use ark_poly::DenseUVPolynomial;
-use ark_serialize::CanonicalSerializeHashExt;
+use ark_serialize::CanonicalSerialize;
 use ark_std::{format, string::ToString};
 
 use jf_primitives::{
@@ -18,7 +18,7 @@ use jf_utils::bytes_to_field_elements;
 use jf_utils::test_rng;
 use sha2::{
     digest::generic_array::{typenum::U32, GenericArray},
-    Sha256,
+    Digest, Sha256,
 };
 
 pub struct Advz<P>
@@ -83,16 +83,18 @@ where
     type Share = Share<P>;
 
     fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
-        // TODO eliminate fully qualified syntax?
-        let field_elements = bytes_to_field_elements(payload);
+        let mut hasher = Sha256::new();
 
-        // TODO for now just put it all in a single polynomial
-        let polynomial = DenseUVPolynomial::from_coefficients_vec(field_elements);
+        // TODO perf: DenseUVPolynomial::from_coefficients_slice copies the slice.
+        // We could avoid unnecessary mem copies if bytes_to_field_elements returned Vec<Vec<F>>
+        let elems = bytes_to_field_elements(payload);
+        for coeffs in elems.chunks(self.reconstruction_size) {
+            let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
+            let commitment = P::commit(&self.ck, &poly).unwrap();
+            commitment.serialize_uncompressed(&mut hasher).unwrap();
+        }
 
-        // TODO eliminate fully qualified syntax?
-        let commitment = P::commit(&self.ck, &polynomial).unwrap();
-
-        Ok(commitment.hash_uncompressed::<Sha256>())
+        Ok(hasher.finalize())
     }
 
     fn disperse(&self, payload: &[u8]) -> Result<Vec<Self::Share>, PrimitivesError> {
@@ -157,7 +159,7 @@ where
     ) -> Result<Vec<<Advz<P> as VID>::Share>, PrimitivesError> {
         // TODO random linear combo of polynomials; for now just put it all in a single polynomial
         // let polynomial = DensePolynomial::from_coefficients_vec(field_elements);
-        let polynomial = DenseUVPolynomial::from_coefficients_slice(&payload);
+        let polynomial = DenseUVPolynomial::from_coefficients_slice(payload);
 
         // TODO eliminate fully qualified syntax?
         let commitment = P::commit(&self.ck, &polynomial)
@@ -214,6 +216,7 @@ where
 #[cfg(test)]
 mod tests {
     use ark_bls12_381::Bls12_381;
+    use ark_std::{rand::RngCore, vec};
     use jf_primitives::pcs::prelude::UnivariateKzgPCS;
 
     use super::*;
@@ -254,5 +257,19 @@ mod tests {
         // recover from a subset of shares
         let recovered_field_elements = vid.recover_field_elements(&shares[..2]).unwrap();
         assert_eq!(recovered_field_elements, field_elements);
+    }
+
+    #[test]
+    fn commit_basic_correctness() {
+        let mut rng = test_rng();
+        let lengths = [2, 16, 32, 48, 63, 64, 65, 100, 200];
+        let vid = Advz::<PCS>::new(2, 3).unwrap();
+
+        for len in lengths {
+            let mut random_bytes = vec![0u8; len];
+            rng.fill_bytes(&mut random_bytes);
+
+            vid.commit(&random_bytes).unwrap();
+        }
     }
 }
