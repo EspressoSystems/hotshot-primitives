@@ -67,8 +67,7 @@ where
     P: PolynomialCommitmentScheme,
 {
     // TODO: split `polynomial_commitments` from ShareData to avoid duplicate data?
-    // TODO only one commitment for now
-    polynomial_commitments: P::Commitment,
+    polynomial_commitments: Vec<P::Commitment>,
 
     id: usize,
     encoded_data: Vec<P::Evaluation>,
@@ -120,7 +119,7 @@ where
 
         let success = P::verify(
             &self.vk,
-            &share.polynomial_commitments,
+            &share.polynomial_commitments[0],
             &id,
             &value,
             &share.proof,
@@ -184,7 +183,7 @@ where
                 let (proof, _value) = P::open(&self.ck, &polynomial, &id).unwrap();
 
                 Share {
-                    polynomial_commitments: commitment.clone(),
+                    polynomial_commitments: vec![commitment.clone()],
                     encoded_data: vec![chunk.value],
                     proof: proof,
                     id: chunk.index,
