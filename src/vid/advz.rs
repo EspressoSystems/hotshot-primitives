@@ -72,7 +72,8 @@ where
     id: usize,
     encoded_data: Vec<P::Evaluation>,
 
-    proof: P::Proof,
+    // TODO for now do not aggregate proofs
+    proof: Vec<P::Proof>,
 }
 
 impl<P> VID for Advz<P>
@@ -122,7 +123,7 @@ where
             &share.polynomial_commitments[0],
             &id,
             &value,
-            &share.proof,
+            &share.proof[0],
         )
         .unwrap();
 
@@ -185,7 +186,7 @@ where
                 Share {
                     polynomial_commitments: vec![commitment.clone()],
                     encoded_data: vec![chunk.value],
-                    proof: proof,
+                    proof: vec![proof],
                     id: chunk.index,
                 }
             })
