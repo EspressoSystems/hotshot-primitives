@@ -201,22 +201,40 @@ where
         shares: &[<Advz<P> as VID>::Share],
     ) -> Result<Vec<P::Evaluation>, PrimitivesError> {
         if shares.len() < self.reconstruction_size {
-            return Err(PrimitivesError::ParameterError("not enough shares.".into()));
+            return Err(PrimitivesError::ParameterError("not enough shares".into()));
         }
 
-        // TODO check payload commitment
+        // all shares must have equal data len
+        let num_polys = shares
+            .first()
+            .ok_or(PrimitivesError::ParameterError("not enough shares".into()))?
+            .encoded_data
+            .len();
+        if shares.iter().any(|s| s.encoded_data.len() != num_polys) {
+            return Err(PrimitivesError::ParameterError(
+                "shares do not have equal data lengths".into(),
+            ));
+        }
 
         for s in shares.iter() {
             self.verify_share(s)?;
         }
 
-        ReedSolomonErasureCode::decode(
-            shares.iter().map(|s| ReedSolomonErasureCodeShare {
-                index: s.id,
-                value: s.encoded_data[0],
-            }),
-            self.reconstruction_size,
-        )
+        // TODO check payload commitment
+
+        let result_len = num_polys * self.reconstruction_size;
+        let mut result = Vec::with_capacity(result_len);
+        for i in 0..num_polys {
+            result.append(&mut ReedSolomonErasureCode::decode(
+                shares.iter().map(|s| ReedSolomonErasureCodeShare {
+                    index: s.id,
+                    value: s.encoded_data[i],
+                }),
+                self.reconstruction_size,
+            )?);
+        }
+        assert_eq!(result.len(), result_len);
+        Ok(result)
     }
 }
 
