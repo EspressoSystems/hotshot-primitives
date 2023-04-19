@@ -225,13 +225,14 @@ where
         let result_len = num_polys * self.reconstruction_size;
         let mut result = Vec::with_capacity(result_len);
         for i in 0..num_polys {
-            result.append(&mut ReedSolomonErasureCode::decode(
+            let mut coeffs = ReedSolomonErasureCode::decode(
                 shares.iter().map(|s| ReedSolomonErasureCodeShare {
                     index: s.id,
                     value: s.encoded_data[i],
                 }),
                 self.reconstruction_size,
-            )?);
+            )?;
+            result.append(&mut coeffs);
         }
         assert_eq!(result.len(), result_len);
         Ok(result)
@@ -241,30 +242,57 @@ where
 #[cfg(test)]
 mod tests {
     use ark_bls12_381::Bls12_381;
-    use ark_std::{rand::RngCore, vec};
+    use ark_ff::{Field, PrimeField};
+    use ark_std::{
+        println,
+        rand::{seq::SliceRandom, RngCore},
+        vec,
+    };
     use jf_primitives::pcs::prelude::UnivariateKzgPCS;
 
     use super::*;
     type PCS = UnivariateKzgPCS<Bls12_381>;
 
     #[test]
-    fn basic_correctness() {
-        let vid = Advz::<PCS>::new(2, 3).unwrap();
+    fn round_trip() {
+        let vid_sizes = [(2, 3), (3, 9)];
+        let byte_lens = [2, 16, 32, 47, 48, 49, 64, 100, 400];
 
-        // choose payload len to produce the correct number of shares
-        // TODO `disperse` should do this automatically
-        let payload = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+        let mut rng = test_rng();
 
-        let shares = vid.disperse(&payload).unwrap();
-        assert_eq!(shares.len(), 3);
+        println!(
+            "modulus byte len: {}",
+            (<<PCS as PolynomialCommitmentScheme>::Evaluation as Field>::BasePrimeField
+                ::MODULUS_BIT_SIZE - 7)/8 + 1
+        );
 
-        for s in shares.iter() {
-            vid.verify_share(s).unwrap();
+        for (reconstruction_size, num_storage_nodes) in vid_sizes {
+            let vid = Advz::<PCS>::new(reconstruction_size, num_storage_nodes).unwrap();
+
+            for len in byte_lens {
+                println!(
+                    "m: {} n: {} byte_len: {}",
+                    reconstruction_size, num_storage_nodes, len
+                );
+
+                let mut bytes_random = vec![0u8; len];
+                rng.fill_bytes(&mut bytes_random);
+
+                let mut shares = vid.disperse(&bytes_random).unwrap();
+                assert_eq!(shares.len(), num_storage_nodes);
+
+                for s in shares.iter() {
+                    vid.verify_share(s).unwrap();
+                }
+
+                // sample a random subset of shares with size reconstruction_size
+                shares.shuffle(&mut rng);
+                let shares = &shares[..reconstruction_size];
+
+                let bytes_recovered = vid.recover_payload(shares).unwrap();
+                assert_eq!(bytes_recovered, bytes_random);
+            }
         }
-
-        // recover from a subset of shares
-        let recovered_bytes = vid.recover_payload(&shares[..2]).unwrap();
-        assert_eq!(recovered_bytes, payload);
     }
 
     #[test]
