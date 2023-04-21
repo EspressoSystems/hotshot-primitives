@@ -2,9 +2,10 @@
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
 use super::VID;
+use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::DenseUVPolynomial;
 use ark_serialize::CanonicalSerialize;
-use ark_std::{format, vec, vec::Vec};
+use ark_std::{format, vec, vec::Vec, Zero};
 
 use jf_primitives::{
     erasure_code::{
@@ -61,6 +62,7 @@ where
 
 // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
 pub type Commitment = GenericArray<u8, U32>;
+// pub type Commitment = sha2::Digest::Output;
 
 pub struct Share<P>
 where
@@ -73,7 +75,8 @@ where
     encoded_data: Vec<P::Evaluation>,
 
     // TODO for now do not aggregate proofs
-    proof: Vec<P::Proof>,
+    old_proofs: Vec<P::Proof>,
+    _proof: P::Proof,
 }
 
 impl<P> VID for Advz<P>
@@ -116,11 +119,11 @@ where
         let id: P::Point = P::Point::from(share.id as u64);
 
         // TODO value = random lin combo of payloads
-        assert_eq!(share.encoded_data.len(), share.proof.len());
+        assert_eq!(share.encoded_data.len(), share.old_proofs.len());
         for ((data, proof), comm) in share
             .encoded_data
             .iter()
-            .zip(share.proof.iter())
+            .zip(share.old_proofs.iter())
             .zip(share.polynomial_commitments.iter())
         {
             let success = P::verify(&self.vk, &comm, &id, &data, &proof).unwrap();
@@ -153,45 +156,101 @@ where
         &self,
         payload: &[P::Evaluation],
     ) -> Result<Vec<<Advz<P> as VID>::Share>, PrimitivesError> {
+        // - partition payload into polynomials
+        // - compute commitments to those polynomials for result bcast
+        // - evaluate those polynomials at 0..self.num_storage_nodes for result encoded data
+        // - compute payload commitment as in VID::commit
         // TODO make this idiomatic and memory efficient
+        let mut hasher = Sha256::new();
         let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
         let mut polys = Vec::with_capacity(num_polys);
         let mut commitments = Vec::with_capacity(num_polys);
-        let mut encoded_data = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
-        let mut proofs = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+        let mut storage_node_evals = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+        let mut old_storage_node_proofs =
+            vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
         for coeffs in payload.chunks(self.reconstruction_size) {
             let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
             let commitment = P::commit(&self.ck, &poly).unwrap();
+            commitment.serialize_uncompressed(&mut hasher).unwrap();
 
             // TODO use batch_open_fk23
             for index in 0..self.num_storage_nodes {
                 let id = P::Point::from((index + 1) as u64);
                 let (proof, value) = P::open(&self.ck, &poly, &id).unwrap();
-                encoded_data[index].push(value);
-                proofs[index].push(proof);
+                storage_node_evals[index].push(value);
+                old_storage_node_proofs[index].push(proof);
             }
 
             polys.push(poly);
             commitments.push(commitment);
         }
+        let payload_commitment = hasher.finalize();
+
+        // sanity checks
         assert_eq!(polys.len(), num_polys);
         assert_eq!(commitments.len(), num_polys);
-        assert_eq!(encoded_data.len(), self.num_storage_nodes);
-        assert_eq!(proofs.len(), self.num_storage_nodes);
-        for (v, p) in encoded_data.iter().zip(proofs.iter()) {
+        assert_eq!(storage_node_evals.len(), self.num_storage_nodes);
+        assert_eq!(old_storage_node_proofs.len(), self.num_storage_nodes);
+        for (v, p) in storage_node_evals
+            .iter()
+            .zip(old_storage_node_proofs.iter())
+        {
             assert_eq!(v.len(), num_polys);
             assert_eq!(p.len(), num_polys);
         }
 
-        Ok(encoded_data
-            .into_iter()
-            .zip(proofs.into_iter())
+        // compute pseudorandom scalars t[j] = hash(commit(payload), poly_evals(j))
+        // as per hotshot paper
+        let hasher = Sha256::new().chain_update(payload_commitment);
+        let my_hasher = <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
+        let storage_node_scalars: Vec<P::Evaluation> = storage_node_evals
+            .iter()
+            .map(|evals| {
+                let mut hasher = hasher.clone();
+                for eval in evals.iter() {
+                    eval.serialize_uncompressed(&mut hasher).unwrap();
+                }
+
+                // TODO
+                // can't use from_random_bytes because it's fallible
+                // (in what sense is it from "random" bytes?!)
+                // HashToField does not expose an incremental API
+                // So use a vanilla hasher and pipe hasher.finalize() through hash-to-field (sheesh!)
+                *my_hasher
+                    .hash_to_field(&hasher.finalize(), 1)
+                    .first()
+                    .unwrap()
+            })
+            .collect();
+
+        // compute aggregate KZG proofs for each storage node j as per hotshot paper:
+        // - compute pseudorandom combo polynomial p_j = sum_i t[j]^i * poly[i]
+        // - compute KZG proof for p_j(j)
+        Ok(storage_node_scalars
+            .iter()
+            .zip(storage_node_evals)
+            .zip(old_storage_node_proofs) // TODO eliminate
             .enumerate()
-            .map(|(i, (data, proof))| Share {
-                polynomial_commitments: commitments.clone(),
-                id: i + 1,
-                encoded_data: data,
-                proof,
+            .map(|(index, ((scalar, evals), old_proofs))| {
+                // Horner's method
+                let storage_node_poly = polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
+                    // `Polynomial` does not impl `Mul` by scalar
+                    // so we need to multiply each coeff by t
+                    // TODO refactor into a mul_by_scalar function
+                    // TODO refactor into a lin_combo function that works on anything that can be multiplied by a field element
+                    res + P::Polynomial::from_coefficients_vec(
+                        poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
+                    )
+                });
+                let id = P::Point::from((index + 1) as u64);
+                let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
+                Share {
+                    polynomial_commitments: commitments.clone(),
+                    id: index + 1,
+                    encoded_data: evals,
+                    old_proofs: old_proofs,
+                    _proof: proof,
+                }
             })
             .collect())
     }
