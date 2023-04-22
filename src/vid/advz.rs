@@ -2,10 +2,11 @@
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
 use super::VID;
+use ark_ec::CurveGroup;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::DenseUVPolynomial;
 use ark_serialize::CanonicalSerialize;
-use ark_std::{format, vec, vec::Vec, Zero};
+use ark_std::{format, marker::PhantomData, vec, vec::Vec, Zero};
 
 use jf_primitives::{
     erasure_code::{
@@ -22,7 +23,7 @@ use sha2::{
     Digest, Sha256,
 };
 
-pub struct Advz<P>
+pub struct Advz<P, T>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -32,9 +33,10 @@ where
     // vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     ck: P::ProverParam,
     vk: P::VerifierParam,
+    _phantom: PhantomData<T>, // TODO need this for trait bounds for PolynomialCommitmentScheme
 }
 
-impl<P> Advz<P>
+impl<P, T> Advz<P, T>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -56,13 +58,10 @@ where
             num_storage_nodes,
             ck,
             vk,
+            _phantom: PhantomData,
         })
     }
 }
-
-// TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
-pub type Commitment = GenericArray<u8, U32>;
-// pub type Commitment = sha2::Digest::Output;
 
 pub struct Share<P>
 where
@@ -79,12 +78,18 @@ where
     _proof: P::Proof,
 }
 
-impl<P> VID for Advz<P>
+impl<P, T> VID for Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
+    P::Commitment: From<T>,
+    T: CurveGroup<ScalarField = P::Evaluation>,
+    (T,): From<P::Commitment> + for<'a> From<&'a P::Commitment>,
 {
-    type Commitment = Commitment;
+    // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
+    type Commitment = GenericArray<u8, U32>;
+    // type Commitment = sha2::Digest::Output;
+
     type Share = Share<P>;
 
     fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
@@ -118,7 +123,71 @@ where
     ) -> Result<(), jf_primitives::errors::PrimitivesError> {
         let id: P::Point = P::Point::from(share.id as u64);
 
+        // compute payload commitment from polynomial commitments
+        let payload_commitment = {
+            let mut hasher = Sha256::new();
+            for comm in share.polynomial_commitments.iter() {
+                comm.serialize_uncompressed(&mut hasher).unwrap();
+            }
+            hasher.finalize()
+        };
+
+        // compute my scalar
+        let scalar: P::Evaluation = {
+            let mut hasher = Sha256::new().chain_update(payload_commitment);
+            let hasher_to_field =
+                <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
+            for eval in share.encoded_data.iter() {
+                eval.serialize_uncompressed(&mut hasher).unwrap();
+            }
+            *hasher_to_field
+                .hash_to_field(&hasher.finalize(), 1)
+                .first()
+                .unwrap()
+        };
+
+        // compute aggregate KZG commit and aggregate polynomial eval
+        // TODO UnivariateKzgPCS::Commitment is a newtype wrapper that doesn't expose group ops
+        let _foo = <(T,)>::from(share.polynomial_commitments[0].clone()).0;
+        let _aggregate_commit = P::Commitment::from(
+            share
+                .polynomial_commitments
+                .iter()
+                .rfold(T::zero(), |res, comm| (<(T,)>::from(comm).0 * scalar) + res),
+        );
+
+        // // copied
+        // Ok(storage_node_scalars
+        //     .iter()
+        //     .zip(storage_node_evals)
+        //     .zip(old_storage_node_proofs) // TODO eliminate
+        //     .enumerate()
+        //     .map(|(index, ((scalar, evals), old_proofs))| {
+        //         // Horner's method
+        //         let storage_node_poly = polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
+        //             // `Polynomial` does not impl `Mul` by scalar
+        //             // so we need to multiply each coeff by t
+        //             // TODO refactor into a mul_by_scalar function
+        //             // TODO refactor into a lin_combo function that works on anything that can be multiplied by a field element
+        //             res + P::Polynomial::from_coefficients_vec(
+        //                 poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
+        //             )
+        //         });
+        //         let id = P::Point::from((index + 1) as u64);
+        //         let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
+        //         Share {
+        //             polynomial_commitments: commitments.clone(),
+        //             id: index + 1,
+        //             encoded_data: evals,
+        //             old_proofs: old_proofs,
+        //             _proof: proof,
+        //         }
+        //     })
+        //     .collect())
+
         // TODO value = random lin combo of payloads
+
+        // TODO: OLD: verify all old proofs
         assert_eq!(share.encoded_data.len(), share.old_proofs.len());
         for ((data, proof), comm) in share
             .encoded_data
@@ -145,17 +214,20 @@ where
     }
 }
 
-impl<P> Advz<P>
+impl<P, T> Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
+    P::Commitment: From<T>,
+    T: CurveGroup<ScalarField = P::Evaluation>,
+    (T,): From<P::Commitment> + for<'a> From<&'a P::Commitment>,
 {
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
     pub fn disperse_field_elements(
         &self,
         payload: &[P::Evaluation],
-    ) -> Result<Vec<<Advz<P> as VID>::Share>, PrimitivesError> {
+    ) -> Result<Vec<<Advz<P, T> as VID>::Share>, PrimitivesError> {
         // - partition payload into polynomials
         // - compute commitments to those polynomials for result bcast
         // - evaluate those polynomials at 0..self.num_storage_nodes for result encoded data
@@ -202,7 +274,8 @@ where
         // compute pseudorandom scalars t[j] = hash(commit(payload), poly_evals(j))
         // as per hotshot paper
         let hasher = Sha256::new().chain_update(payload_commitment);
-        let my_hasher = <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
+        let hasher_to_field =
+            <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
         let storage_node_scalars: Vec<P::Evaluation> = storage_node_evals
             .iter()
             .map(|evals| {
@@ -216,7 +289,7 @@ where
                 // (in what sense is it from "random" bytes?!)
                 // HashToField does not expose an incremental API
                 // So use a vanilla hasher and pipe hasher.finalize() through hash-to-field (sheesh!)
-                *my_hasher
+                *hasher_to_field
                     .hash_to_field(&hasher.finalize(), 1)
                     .first()
                     .unwrap()
@@ -257,7 +330,7 @@ where
 
     pub fn recover_field_elements(
         &self,
-        shares: &[<Advz<P> as VID>::Share],
+        shares: &[<Advz<P, T> as VID>::Share],
     ) -> Result<Vec<P::Evaluation>, PrimitivesError> {
         if shares.len() < self.reconstruction_size {
             return Err(PrimitivesError::ParameterError("not enough shares".into()));
@@ -301,6 +374,7 @@ where
 #[cfg(test)]
 mod tests {
     use ark_bls12_381::Bls12_381;
+    use ark_ec::pairing::Pairing;
     use ark_ff::{Field, PrimeField};
     use ark_std::{
         println,
@@ -311,6 +385,7 @@ mod tests {
 
     use super::*;
     type PCS = UnivariateKzgPCS<Bls12_381>;
+    type G = <Bls12_381 as Pairing>::G1;
 
     #[test]
     fn round_trip() {
@@ -326,7 +401,7 @@ mod tests {
         );
 
         for (reconstruction_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS>::new(reconstruction_size, num_storage_nodes).unwrap();
+            let vid = Advz::<PCS, G>::new(reconstruction_size, num_storage_nodes).unwrap();
 
             for len in byte_lens {
                 println!(
@@ -356,7 +431,7 @@ mod tests {
 
     #[test]
     fn basic_correctness_field_elements() {
-        let vid = Advz::<PCS>::new(2, 3).unwrap();
+        let vid = Advz::<PCS, G>::new(2, 3).unwrap();
 
         let field_elements = [
             <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation::from(7u64),
@@ -379,7 +454,7 @@ mod tests {
     fn commit_basic_correctness() {
         let mut rng = test_rng();
         let lengths = [2, 16, 32, 48, 63, 64, 65, 100, 200];
-        let vid = Advz::<PCS>::new(2, 3).unwrap();
+        let vid = Advz::<PCS, G>::new(2, 3).unwrap();
 
         for len in lengths {
             let mut random_bytes = vec![0u8; len];
