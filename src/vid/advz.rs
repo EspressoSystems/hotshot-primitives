@@ -121,6 +121,8 @@ where
         &self,
         share: &Self::Share,
     ) -> Result<(), jf_primitives::errors::PrimitivesError> {
+        assert_eq!(share.encoded_data.len(), share.polynomial_commitments.len());
+
         let id: P::Point = P::Point::from(share.id as u64);
 
         // compute payload commitment from polynomial commitments
@@ -148,44 +150,32 @@ where
 
         // compute aggregate KZG commit and aggregate polynomial eval
         // TODO UnivariateKzgPCS::Commitment is a newtype wrapper that doesn't expose group ops
-        let _foo = <(T,)>::from(share.polynomial_commitments[0].clone()).0;
-        let _aggregate_commit = P::Commitment::from(
+        // let _foo = <(T,)>::from(share.polynomial_commitments[0].clone()).0;
+        let aggregate_commit = P::Commitment::from(
             share
                 .polynomial_commitments
                 .iter()
-                .rfold(T::zero(), |res, comm| (<(T,)>::from(comm).0 * scalar) + res),
+                .rfold(T::zero(), |res, comm| (<(T,)>::from(comm).0 * scalar) + res), // why (T,)? see link
         );
+        let aggregate_value = share
+            .encoded_data
+            .iter()
+            .rfold(P::Evaluation::zero(), |res, val| scalar * val + res);
 
-        // // copied
-        // Ok(storage_node_scalars
-        //     .iter()
-        //     .zip(storage_node_evals)
-        //     .zip(old_storage_node_proofs) // TODO eliminate
-        //     .enumerate()
-        //     .map(|(index, ((scalar, evals), old_proofs))| {
-        //         // Horner's method
-        //         let storage_node_poly = polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
-        //             // `Polynomial` does not impl `Mul` by scalar
-        //             // so we need to multiply each coeff by t
-        //             // TODO refactor into a mul_by_scalar function
-        //             // TODO refactor into a lin_combo function that works on anything that can be multiplied by a field element
-        //             res + P::Polynomial::from_coefficients_vec(
-        //                 poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
-        //             )
-        //         });
-        //         let id = P::Point::from((index + 1) as u64);
-        //         let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
-        //         Share {
-        //             polynomial_commitments: commitments.clone(),
-        //             id: index + 1,
-        //             encoded_data: evals,
-        //             old_proofs: old_proofs,
-        //             _proof: proof,
-        //         }
-        //     })
-        //     .collect())
-
-        // TODO value = random lin combo of payloads
+        // verify aggregate proof
+        let success = P::verify(
+            &self.vk,
+            &aggregate_commit,
+            &id,
+            &aggregate_value,
+            &share._proof,
+        )
+        .unwrap();
+        if !success {
+            return Err(PrimitivesError::VerificationError(
+                "aggregate verification failed".into(),
+            ));
+        }
 
         // TODO: OLD: verify all old proofs
         assert_eq!(share.encoded_data.len(), share.old_proofs.len());
