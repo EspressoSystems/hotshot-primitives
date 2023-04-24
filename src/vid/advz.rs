@@ -4,7 +4,7 @@
 use super::VID;
 use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
-use ark_poly::DenseUVPolynomial;
+use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_serialize::CanonicalSerialize;
 use ark_std::{format, marker::PhantomData, vec, vec::Vec, Zero};
 
@@ -216,7 +216,7 @@ where
             // TODO use batch_open_fk23
             for index in 0..self.num_storage_nodes {
                 let id = P::Point::from((index + 1) as u64);
-                let (_proof, value) = P::open(&self.ck, &poly, &id).unwrap();
+                let value = poly.evaluate(&id);
                 storage_node_evals[index].push(value);
             }
 
