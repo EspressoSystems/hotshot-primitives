@@ -270,6 +270,7 @@ where
                             // so we need to multiply each coeff by t
                             // TODO refactor into a mul_by_scalar function
                             // TODO refactor into a lin_combo function that works on anything that can be multiplied by a field element
+                            // -> can't do this because arkworks doesn't impl all the Mul, Add ops for references :sad:
                             res + P::Polynomial::from_coefficients_vec(
                                 poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
                             )
