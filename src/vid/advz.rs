@@ -208,8 +208,6 @@ where
         let mut polys = Vec::with_capacity(num_polys);
         let mut commitments = Vec::with_capacity(num_polys);
         let mut storage_node_evals = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
-        let mut old_storage_node_proofs =
-            vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
         for coeffs in payload.chunks(self.reconstruction_size) {
             let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
             let commitment = P::commit(&self.ck, &poly).unwrap();
@@ -218,9 +216,8 @@ where
             // TODO use batch_open_fk23
             for index in 0..self.num_storage_nodes {
                 let id = P::Point::from((index + 1) as u64);
-                let (proof, value) = P::open(&self.ck, &poly, &id).unwrap();
+                let (_proof, value) = P::open(&self.ck, &poly, &id).unwrap();
                 storage_node_evals[index].push(value);
-                old_storage_node_proofs[index].push(proof);
             }
 
             polys.push(poly);
@@ -232,13 +229,8 @@ where
         assert_eq!(polys.len(), num_polys);
         assert_eq!(commitments.len(), num_polys);
         assert_eq!(storage_node_evals.len(), self.num_storage_nodes);
-        assert_eq!(old_storage_node_proofs.len(), self.num_storage_nodes);
-        for (v, p) in storage_node_evals
-            .iter()
-            .zip(old_storage_node_proofs.iter())
-        {
+        for v in storage_node_evals.iter() {
             assert_eq!(v.len(), num_polys);
-            assert_eq!(p.len(), num_polys);
         }
 
         // compute pseudorandom scalars t[j] = hash(commit(payload), poly_evals(j))
