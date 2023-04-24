@@ -67,12 +67,8 @@ pub struct Share<P>
 where
     P: PolynomialCommitmentScheme,
 {
-    // TODO: split `polynomial_commitments` from ShareData to avoid duplicate data?
-    polynomial_commitments: Vec<P::Commitment>,
-
     id: usize,
     encoded_data: Vec<P::Evaluation>,
-
     proof: P::Proof,
 }
 
@@ -91,6 +87,7 @@ where
     // type Commitment = sha2::Digest::Output;
 
     type Share = Share<P>;
+    type Bcast = Vec<P::Commitment>;
 
     fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
         let mut hasher = Sha256::new();
@@ -107,28 +104,23 @@ where
         Ok(hasher.finalize())
     }
 
-    fn disperse(&self, payload: &[u8]) -> Result<Vec<Self::Share>, PrimitivesError> {
-        // TODO eliminate fully qualified syntax?
-        let field_elements: Vec<P::Evaluation> = bytes_to_field_elements(payload);
-
-        // TODO temporary: one polynomial only
-        // assert_eq!(field_elements.len(), self.reconstruction_size);
-
-        self.disperse_field_elements(&field_elements)
+    fn disperse(&self, payload: &[u8]) -> Result<(Vec<Self::Share>, Self::Bcast), PrimitivesError> {
+        self.disperse_elems(&bytes_to_field_elements(payload))
     }
 
     fn verify_share(
         &self,
         share: &Self::Share,
+        bcast: &Self::Bcast,
     ) -> Result<(), jf_primitives::errors::PrimitivesError> {
-        assert_eq!(share.encoded_data.len(), share.polynomial_commitments.len());
+        assert_eq!(share.encoded_data.len(), bcast.len());
 
         let id: P::Point = P::Point::from(share.id as u64);
 
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
             let mut hasher = Sha256::new();
-            for comm in share.polynomial_commitments.iter() {
+            for comm in bcast.iter() {
                 comm.serialize_uncompressed(&mut hasher).unwrap();
             }
             hasher.finalize()
@@ -150,8 +142,7 @@ where
 
         // compute aggregate KZG commit and aggregate polynomial eval
         let aggregate_commit = P::Commitment::from(
-            share
-                .polynomial_commitments
+            bcast
                 .iter()
                 .rfold(T::Group::zero(), |res, comm| *comm.as_ref() * scalar + res) // group ops in projective form
                 .into(), // final conversion to affine form
@@ -182,9 +173,9 @@ where
     fn recover_payload(
         &self,
         shares: &[Self::Share],
+        bcast: &Self::Bcast,
     ) -> Result<Vec<u8>, jf_primitives::errors::PrimitivesError> {
-        let field_elements = self.recover_field_elements(shares)?;
-        Ok(bytes_from_field_elements(field_elements).unwrap())
+        Ok(bytes_from_field_elements(self.recover_elems(shares, bcast)?).unwrap())
     }
 }
 
@@ -196,10 +187,11 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,
 {
     /// Compute shares to send to the storage nodes
-    pub fn disperse_field_elements(
+    pub fn disperse_elems(
         &self,
         payload: &[P::Evaluation],
-    ) -> Result<Vec<<Advz<P, T> as VID>::Share>, PrimitivesError> {
+    ) -> Result<(Vec<<Advz<P, T> as VID>::Share>, <Advz<P, T> as VID>::Bcast), PrimitivesError>
+    {
         let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
 
         // polys: partition payload into polynomial coefficients
@@ -265,36 +257,40 @@ where
         // For each storage node j as per hotshot paper:
         // - Compute pseudorandom storage_node_poly[j]: sum_i storage_node_scalars[j]^i * polys[i]
         // - Compute aggregate proof for storage_node_poly[j](j)
-        Ok(storage_node_scalars
-            .iter()
-            .zip(storage_node_evals)
-            .enumerate()
-            .map(|(index, (scalar, evals))| {
-                // Horner's method
-                let storage_node_poly = polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
-                    // `Polynomial` does not impl `Mul` by scalar
-                    // so we need to multiply each coeff by t
-                    // TODO refactor into a mul_by_scalar function
-                    // TODO refactor into a lin_combo function that works on anything that can be multiplied by a field element
-                    res + P::Polynomial::from_coefficients_vec(
-                        poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
-                    )
-                });
-                let id = P::Point::from((index + 1) as u64);
-                let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
-                Share {
-                    polynomial_commitments: poly_commits.clone(),
-                    id: index + 1,
-                    encoded_data: evals,
-                    proof,
-                }
-            })
-            .collect())
+        Ok((
+            storage_node_scalars
+                .iter()
+                .zip(storage_node_evals)
+                .enumerate()
+                .map(|(index, (scalar, evals))| {
+                    // Horner's method
+                    let storage_node_poly =
+                        polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
+                            // `Polynomial` does not impl `Mul` by scalar
+                            // so we need to multiply each coeff by t
+                            // TODO refactor into a mul_by_scalar function
+                            // TODO refactor into a lin_combo function that works on anything that can be multiplied by a field element
+                            res + P::Polynomial::from_coefficients_vec(
+                                poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
+                            )
+                        });
+                    let id = P::Point::from((index + 1) as u64);
+                    let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
+                    Share {
+                        id: index + 1,
+                        encoded_data: evals,
+                        proof,
+                    }
+                })
+                .collect(),
+            poly_commits,
+        ))
     }
 
-    pub fn recover_field_elements(
+    pub fn recover_elems(
         &self,
         shares: &[<Advz<P, T> as VID>::Share],
+        _bcast: &<Advz<P, T> as VID>::Bcast,
     ) -> Result<Vec<P::Evaluation>, PrimitivesError> {
         if shares.len() < self.reconstruction_size {
             return Err(PrimitivesError::ParameterError("not enough shares".into()));
@@ -311,12 +307,6 @@ where
                 "shares do not have equal data lengths".into(),
             ));
         }
-
-        for s in shares.iter() {
-            self.verify_share(s)?;
-        }
-
-        // TODO check payload commitment
 
         let result_len = num_polys * self.reconstruction_size;
         let mut result = Vec::with_capacity(result_len);
@@ -376,42 +366,21 @@ mod tests {
                 let mut bytes_random = vec![0u8; len];
                 rng.fill_bytes(&mut bytes_random);
 
-                let mut shares = vid.disperse(&bytes_random).unwrap();
+                let (mut shares, bcast) = vid.disperse(&bytes_random).unwrap();
                 assert_eq!(shares.len(), num_storage_nodes);
 
-                for s in shares.iter() {
-                    vid.verify_share(s).unwrap();
+                for share in shares.iter() {
+                    vid.verify_share(share, &bcast).unwrap();
                 }
 
                 // sample a random subset of shares with size reconstruction_size
                 shares.shuffle(&mut rng);
                 let shares = &shares[..reconstruction_size];
 
-                let bytes_recovered = vid.recover_payload(shares).unwrap();
+                let bytes_recovered = vid.recover_payload(shares, &bcast).unwrap();
                 assert_eq!(bytes_recovered, bytes_random);
             }
         }
-    }
-
-    #[test]
-    fn basic_correctness_field_elements() {
-        let vid = Advz::<PCS, G>::new(2, 3).unwrap();
-
-        let field_elements = [
-            <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation::from(7u64),
-            <UnivariateKzgPCS<Bls12_381> as PolynomialCommitmentScheme>::Evaluation::from(13u64),
-        ];
-
-        let shares = vid.disperse_field_elements(&field_elements).unwrap();
-        assert_eq!(shares.len(), 3);
-
-        for s in shares.iter() {
-            vid.verify_share(s).unwrap();
-        }
-
-        // recover from a subset of shares
-        let recovered_field_elements = vid.recover_field_elements(&shares[..2]).unwrap();
-        assert_eq!(recovered_field_elements, field_elements);
     }
 
     #[test]
