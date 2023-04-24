@@ -2,7 +2,7 @@
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
 use super::VID;
-use ark_ec::CurveGroup;
+use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::DenseUVPolynomial;
 use ark_serialize::CanonicalSerialize;
@@ -82,8 +82,8 @@ impl<P, T> VID for Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
-    P::Commitment: From<T> + AsRef<T::Affine>,
-    T: CurveGroup<ScalarField = P::Evaluation>,
+    P::Commitment: From<T> + AsRef<T>,
+    T: AffineRepr<ScalarField = P::Evaluation>,
 {
     // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
     type Commitment = GenericArray<u8, U32>;
@@ -152,7 +152,9 @@ where
             share
                 .polynomial_commitments
                 .iter()
-                .rfold(T::zero(), |res, comm| (*comm.as_ref() * scalar) + res),
+                .rfold(T::zero(), |res, comm| {
+                    (*comm.as_ref() * scalar + res).into()
+                }),
         );
         let aggregate_value = share
             .encoded_data
@@ -205,8 +207,8 @@ impl<P, T> Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
-    P::Commitment: From<T> + AsRef<T::Affine>,
-    T: CurveGroup<ScalarField = P::Evaluation>,
+    P::Commitment: From<T> + AsRef<T>,
+    T: AffineRepr<ScalarField = P::Evaluation>,
 {
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
@@ -371,7 +373,7 @@ mod tests {
 
     use super::*;
     type PCS = UnivariateKzgPCS<Bls12_381>;
-    type G = <Bls12_381 as Pairing>::G1;
+    type G = <Bls12_381 as Pairing>::G1Affine;
 
     #[test]
     fn round_trip() {
