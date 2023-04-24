@@ -76,12 +76,15 @@ where
     proof: P::Proof,
 }
 
+/// Explanation of trait bounds:
+/// 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
+/// 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
 impl<P, T> VID for Advz<P, T>
 where
-    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
-    P::Polynomial: DenseUVPolynomial<P::Evaluation>,
-    P::Commitment: From<T> + AsRef<T>,
-    T: AffineRepr<ScalarField = P::Evaluation>,
+    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
+    P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
+    P::Commitment: From<T> + AsRef<T>,                                                    // 3
+    T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
 {
     // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
     type Commitment = GenericArray<u8, U32>;
@@ -193,49 +196,56 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,
 {
     /// Compute shares to send to the storage nodes
-    /// TODO take ownership of payload?
     pub fn disperse_field_elements(
         &self,
         payload: &[P::Evaluation],
     ) -> Result<Vec<<Advz<P, T> as VID>::Share>, PrimitivesError> {
-        // - partition payload into polynomials
-        // - compute commitments to those polynomials for result bcast
-        // - evaluate those polynomials at 0..self.num_storage_nodes for result encoded data
-        // - compute payload commitment as in VID::commit
-        // TODO make this idiomatic and memory efficient
-        let mut hasher = Sha256::new();
         let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
-        let mut polys = Vec::with_capacity(num_polys);
-        let mut commitments = Vec::with_capacity(num_polys);
-        let mut storage_node_evals = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
-        for coeffs in payload.chunks(self.reconstruction_size) {
-            let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
-            let commitment = P::commit(&self.ck, &poly).unwrap();
-            commitment.serialize_uncompressed(&mut hasher).unwrap();
 
-            // TODO use batch_open_fk23
-            for index in 0..self.num_storage_nodes {
-                let id = P::Point::from((index + 1) as u64);
-                let value = poly.evaluate(&id);
-                storage_node_evals[index].push(value);
+        // polys: partition payload into polynomial coefficients
+        // poly_commits: for result bcast
+        // storage_node_evals: evaluate polys at many points for erasure-coded result shares
+        // payload_commit: same as in VID::commit
+        let (polys, poly_commits, storage_node_evals, payload_commit) = {
+            let mut hasher = Sha256::new();
+            let mut polys = Vec::with_capacity(num_polys);
+            let mut poly_commits = Vec::with_capacity(num_polys);
+            let mut storage_node_evals =
+                vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+            for coeffs in payload.chunks(self.reconstruction_size) {
+                let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
+                let poly_commit = P::commit(&self.ck, &poly).unwrap();
+                poly_commit.serialize_uncompressed(&mut hasher).unwrap();
+
+                // TODO use batch_open_fk23
+                for index in 0..self.num_storage_nodes {
+                    storage_node_evals[index].push(poly.evaluate(&((index + 1) as u64).into()));
+                }
+
+                polys.push(poly);
+                poly_commits.push(poly_commit);
             }
 
-            polys.push(poly);
-            commitments.push(commitment);
-        }
-        let payload_commitment = hasher.finalize();
+            // sanity checks
+            assert_eq!(polys.len(), num_polys);
+            assert_eq!(poly_commits.len(), num_polys);
+            assert_eq!(storage_node_evals.len(), self.num_storage_nodes);
+            for v in storage_node_evals.iter() {
+                assert_eq!(v.len(), num_polys);
+            }
 
-        // sanity checks
-        assert_eq!(polys.len(), num_polys);
-        assert_eq!(commitments.len(), num_polys);
-        assert_eq!(storage_node_evals.len(), self.num_storage_nodes);
-        for v in storage_node_evals.iter() {
-            assert_eq!(v.len(), num_polys);
-        }
+            (polys, poly_commits, storage_node_evals, hasher.finalize())
+        };
 
-        // compute pseudorandom scalars t[j] = hash(commit(payload), poly_evals(j))
-        // as per hotshot paper
-        let hasher = Sha256::new().chain_update(payload_commitment);
+        // storage_node_scalars[j]: hash(payload_commit, poly_evals(j))
+        //   used for pseudorandom linear combos as per hotshot paper.
+        //
+        // Notes on hash-to-field:
+        // - Can't use `Field::from_random_bytes` because it's fallible
+        //   (in what sense is it from "random" bytes?!)
+        // - `HashToField` does not expose an incremental API (ie. `update`)
+        //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
+        let hasher = Sha256::new().chain_update(payload_commit);
         let hasher_to_field =
             <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
         let storage_node_scalars: Vec<P::Evaluation> = storage_node_evals
@@ -245,12 +255,6 @@ where
                 for eval in evals.iter() {
                     eval.serialize_uncompressed(&mut hasher).unwrap();
                 }
-
-                // TODO
-                // can't use from_random_bytes because it's fallible
-                // (in what sense is it from "random" bytes?!)
-                // HashToField does not expose an incremental API
-                // So use a vanilla hasher and pipe hasher.finalize() through hash-to-field (sheesh!)
                 *hasher_to_field
                     .hash_to_field(&hasher.finalize(), 1)
                     .first()
@@ -258,9 +262,9 @@ where
             })
             .collect();
 
-        // compute aggregate KZG proofs for each storage node j as per hotshot paper:
-        // - compute pseudorandom combo polynomial p_j = sum_i t[j]^i * poly[i]
-        // - compute KZG proof for p_j(j)
+        // For each storage node j as per hotshot paper:
+        // - Compute pseudorandom storage_node_poly[j]: sum_i storage_node_scalars[j]^i * polys[i]
+        // - Compute aggregate proof for storage_node_poly[j](j)
         Ok(storage_node_scalars
             .iter()
             .zip(storage_node_evals)
@@ -279,7 +283,7 @@ where
                 let id = P::Point::from((index + 1) as u64);
                 let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
                 Share {
-                    polynomial_commitments: commitments.clone(),
+                    polynomial_commitments: poly_commits.clone(),
                     id: index + 1,
                     encoded_data: evals,
                     proof,
