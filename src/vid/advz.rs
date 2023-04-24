@@ -73,9 +73,7 @@ where
     id: usize,
     encoded_data: Vec<P::Evaluation>,
 
-    // TODO for now do not aggregate proofs
-    old_proofs: Vec<P::Proof>,
-    _proof: P::Proof,
+    proof: P::Proof,
 }
 
 impl<P, T> VID for Advz<P, T>
@@ -166,7 +164,7 @@ where
             &aggregate_commit,
             &id,
             &aggregate_value,
-            &share._proof,
+            &share.proof,
         )
         .unwrap();
         if !success {
@@ -175,21 +173,6 @@ where
             ));
         }
 
-        // TODO: OLD: verify all old proofs
-        assert_eq!(share.encoded_data.len(), share.old_proofs.len());
-        for ((data, proof), comm) in share
-            .encoded_data
-            .iter()
-            .zip(share.old_proofs.iter())
-            .zip(share.polynomial_commitments.iter())
-        {
-            let success = P::verify(&self.vk, &comm, &id, &data, &proof).unwrap();
-            if !success {
-                return Err(PrimitivesError::VerificationError(
-                    "verification failed".into(),
-                ));
-            }
-        }
         Ok(())
     }
 
@@ -289,9 +272,8 @@ where
         Ok(storage_node_scalars
             .iter()
             .zip(storage_node_evals)
-            .zip(old_storage_node_proofs) // TODO eliminate
             .enumerate()
-            .map(|(index, ((scalar, evals), old_proofs))| {
+            .map(|(index, (scalar, evals))| {
                 // Horner's method
                 let storage_node_poly = polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
                     // `Polynomial` does not impl `Mul` by scalar
@@ -308,8 +290,7 @@ where
                     polynomial_commitments: commitments.clone(),
                     id: index + 1,
                     encoded_data: evals,
-                    old_proofs: old_proofs,
-                    _proof: proof,
+                    proof,
                 }
             })
             .collect())
