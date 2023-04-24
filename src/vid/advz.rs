@@ -152,9 +152,8 @@ where
             share
                 .polynomial_commitments
                 .iter()
-                .rfold(T::zero(), |res, comm| {
-                    (*comm.as_ref() * scalar + res).into()
-                }),
+                .rfold(T::Group::zero(), |res, comm| *comm.as_ref() * scalar + res) // group ops in projective form
+                .into(), // final conversion to affine form
         );
         let aggregate_value = share
             .encoded_data
