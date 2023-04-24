@@ -82,9 +82,8 @@ impl<P, T> VID for Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
-    P::Commitment: From<T>,
+    P::Commitment: From<T> + AsRef<T::Affine>,
     T: CurveGroup<ScalarField = P::Evaluation>,
-    (T,): From<P::Commitment> + for<'a> From<&'a P::Commitment>,
 {
     // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
     type Commitment = GenericArray<u8, U32>;
@@ -149,13 +148,11 @@ where
         };
 
         // compute aggregate KZG commit and aggregate polynomial eval
-        // TODO UnivariateKzgPCS::Commitment is a newtype wrapper that doesn't expose group ops
-        // let _foo = <(T,)>::from(share.polynomial_commitments[0].clone()).0;
         let aggregate_commit = P::Commitment::from(
             share
                 .polynomial_commitments
                 .iter()
-                .rfold(T::zero(), |res, comm| (<(T,)>::from(comm).0 * scalar) + res), // why (T,)? see link
+                .rfold(T::zero(), |res, comm| (*comm.as_ref() * scalar) + res),
         );
         let aggregate_value = share
             .encoded_data
@@ -208,9 +205,8 @@ impl<P, T> Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
-    P::Commitment: From<T>,
+    P::Commitment: From<T> + AsRef<T::Affine>,
     T: CurveGroup<ScalarField = P::Evaluation>,
-    (T,): From<P::Commitment> + for<'a> From<&'a P::Commitment>,
 {
     /// Compute shares to send to the storage nodes
     /// TODO take ownership of payload?
