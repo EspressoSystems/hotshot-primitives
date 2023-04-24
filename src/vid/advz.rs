@@ -68,7 +68,7 @@ where
     P: PolynomialCommitmentScheme,
 {
     id: usize,
-    encoded_data: Vec<P::Evaluation>,
+    evals: Vec<P::Evaluation>,
     proof: P::Proof,
 }
 
@@ -113,7 +113,7 @@ where
         share: &Self::Share,
         bcast: &Self::Bcast,
     ) -> Result<(), jf_primitives::errors::PrimitivesError> {
-        assert_eq!(share.encoded_data.len(), bcast.len());
+        assert_eq!(share.evals.len(), bcast.len());
 
         let id: P::Point = P::Point::from(share.id as u64);
 
@@ -131,7 +131,7 @@ where
             let mut hasher = Sha256::new().chain_update(payload_commitment);
             let hasher_to_field =
                 <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
-            for eval in share.encoded_data.iter() {
+            for eval in share.evals.iter() {
                 eval.serialize_uncompressed(&mut hasher).unwrap();
             }
             *hasher_to_field
@@ -148,7 +148,7 @@ where
                 .into(), // final conversion to affine form
         );
         let aggregate_value = share
-            .encoded_data
+            .evals
             .iter()
             .rfold(P::Evaluation::zero(), |res, val| scalar * val + res);
 
@@ -278,7 +278,7 @@ where
                     let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
                     Share {
                         id: index + 1,
-                        encoded_data: evals,
+                        evals,
                         proof,
                     }
                 })
@@ -300,9 +300,9 @@ where
         let num_polys = shares
             .first()
             .ok_or(PrimitivesError::ParameterError("not enough shares".into()))?
-            .encoded_data
+            .evals
             .len();
-        if shares.iter().any(|s| s.encoded_data.len() != num_polys) {
+        if shares.iter().any(|s| s.evals.len() != num_polys) {
             return Err(PrimitivesError::ParameterError(
                 "shares do not have equal data lengths".into(),
             ));
@@ -314,7 +314,7 @@ where
             let mut coeffs = ReedSolomonErasureCode::decode(
                 shares.iter().map(|s| ReedSolomonErasureCodeShare {
                     index: s.id,
-                    value: s.encoded_data[i],
+                    value: s.evals[i],
                 }),
                 self.reconstruction_size,
             )?;
