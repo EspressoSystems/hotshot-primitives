@@ -1,7 +1,8 @@
 //! Implementation of VID from https://eprint.iacr.org/2021/1500
-//! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
+//! `Avdz` named for the authors Alhaddad-Duan-Varia-Zhang
 
 use super::{VIDError, VIDResult, VID};
+use anyhow::anyhow;
 use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::{DenseUVPolynomial, Polynomial};
@@ -13,7 +14,6 @@ use jf_primitives::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
-    errors::PrimitivesError,
     pcs::PolynomialCommitmentScheme,
 };
 use jf_utils::test_rng;
@@ -29,18 +29,18 @@ where
 {
     reconstruction_size: usize,
     num_storage_nodes: usize,
+    // TODO uncomment after https://github.com/EspressoSystems/jellyfish/pull/231
     // ck: <P::SRS as StructuredReferenceString>::ProverParam,
     // vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     ck: P::ProverParam,
     vk: P::VerifierParam,
-    _phantom: PhantomData<T>, // TODO need this for trait bounds for PolynomialCommitmentScheme
+    _phantom: PhantomData<T>, // needed for trait bounds for `PolynomialCommitmentScheme`
 }
 
 impl<P, T> Advz<P, T>
 where
     P: PolynomialCommitmentScheme,
 {
-    /// TODO we desperately need better error handling
     pub fn new(reconstruction_size: usize, num_storage_nodes: usize) -> VIDResult<Self> {
         if num_storage_nodes < reconstruction_size {
             return Err(VIDError::Argument(format!(
@@ -48,8 +48,8 @@ where
                 reconstruction_size, num_storage_nodes
             )));
         }
-        let pp = P::gen_srs_for_testing(&mut test_rng(), reconstruction_size).unwrap();
-        let (ck, vk) = P::trim(pp, reconstruction_size, None).unwrap();
+        let pp = P::gen_srs_for_testing(&mut test_rng(), reconstruction_size)?;
+        let (ck, vk) = P::trim(pp, reconstruction_size, None)?;
         Ok(Self {
             reconstruction_size,
             num_storage_nodes,
@@ -94,8 +94,8 @@ where
         let elems = bytes_to_field_elements(payload);
         for coeffs in elems.chunks(self.reconstruction_size) {
             let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
-            let commitment = P::commit(&self.ck, &poly).unwrap();
-            commitment.serialize_uncompressed(&mut hasher).unwrap();
+            let commitment = P::commit(&self.ck, &poly)?;
+            commitment.serialize_uncompressed(&mut hasher)?;
         }
 
         Ok(hasher.finalize())
@@ -114,7 +114,7 @@ where
         let payload_commitment = {
             let mut hasher = Sha256::new();
             for comm in bcast.iter() {
-                comm.serialize_uncompressed(&mut hasher).unwrap();
+                comm.serialize_uncompressed(&mut hasher)?;
             }
             hasher.finalize()
         };
@@ -125,12 +125,12 @@ where
             let hasher_to_field =
                 <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
             for eval in share.evals.iter() {
-                eval.serialize_uncompressed(&mut hasher).unwrap();
+                eval.serialize_uncompressed(&mut hasher)?;
             }
             *hasher_to_field
                 .hash_to_field(&hasher.finalize(), 1)
                 .first()
-                .unwrap()
+                .ok_or_else(|| anyhow!("hash_to_field output is empty"))?
         };
 
         // compute aggregate KZG commit and aggregate polynomial eval
@@ -146,23 +146,21 @@ where
             .rfold(P::Evaluation::zero(), |res, val| scalar * val + res);
 
         // verify aggregate proof
-        let success = P::verify(
+        Ok(P::verify(
             &self.vk,
             &aggregate_commit,
             &id,
             &aggregate_value,
             &share.proof,
-        )
-        .unwrap();
-        if !success {
-            return Ok(Err(()));
-        }
-
-        Ok(Ok(()))
+        )?
+        .then(|| ())
+        .ok_or_else(|| ()))
     }
 
     fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VIDResult<Vec<u8>> {
-        Ok(bytes_from_field_elements(self.recover_elems(shares, bcast)?).unwrap())
+        Ok(bytes_from_field_elements(
+            self.recover_elems(shares, bcast)?,
+        )?)
     }
 }
 
@@ -192,8 +190,8 @@ where
                 vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
             for coeffs in payload.chunks(self.reconstruction_size) {
                 let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
-                let poly_commit = P::commit(&self.ck, &poly).unwrap();
-                poly_commit.serialize_uncompressed(&mut hasher).unwrap();
+                let poly_commit = P::commit(&self.ck, &poly)?;
+                poly_commit.serialize_uncompressed(&mut hasher)?;
 
                 // TODO use batch_open_fk23
                 for index in 0..self.num_storage_nodes {
@@ -231,14 +229,14 @@ where
             .map(|evals| {
                 let mut hasher = hasher.clone();
                 for eval in evals.iter() {
-                    eval.serialize_uncompressed(&mut hasher).unwrap();
+                    eval.serialize_uncompressed(&mut hasher)?;
                 }
-                *hasher_to_field
+                Ok(*(hasher_to_field
                     .hash_to_field(&hasher.finalize(), 1)
                     .first()
-                    .unwrap()
+                    .ok_or_else(|| anyhow!("hash_to_field output is empty"))?))
             })
-            .collect();
+            .collect::<Result<_, anyhow::Error>>()?;
 
         // For each storage node j as per hotshot paper:
         // - Compute pseudorandom storage_node_poly[j]: sum_i storage_node_scalars[j]^i * polys[i]
@@ -262,14 +260,14 @@ where
                             )
                         });
                     let id = P::Point::from((index + 1) as u64);
-                    let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id).unwrap();
-                    Share {
+                    let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id)?;
+                    Ok(Share {
                         id: index + 1,
                         evals,
                         proof,
-                    }
+                    })
                 })
-                .collect(),
+                .collect::<Result<_, anyhow::Error>>()?,
             poly_commits,
         ))
     }
@@ -324,8 +322,29 @@ where
     }
 }
 
-impl From<PrimitivesError> for VIDError {
-    fn from(value: PrimitivesError) -> Self {
+/// # Goal:
+/// `anyhow::Error` has the property that `?` magically coerces the error into `anyhow::Error`.
+/// I want the same property for `VIDError`.
+/// I don't know how to achieve this without the following boilerplate.
+///
+/// # Boilerplate:
+/// I want to coerce any error `E` into `VIDError::Internal` similar to `anyhow::Error`.
+/// Unfortunately, I need to manually impl `From<E> for VIDError` for each `E`.
+/// Can't do a generic impl because it conflicts with `impl<T> From<T> for T` in core.
+impl From<jf_primitives::errors::PrimitivesError> for VIDError {
+    fn from(value: jf_primitives::errors::PrimitivesError) -> Self {
+        Self::Internal(value.into())
+    }
+}
+
+impl From<jf_primitives::pcs::prelude::PCSError> for VIDError {
+    fn from(value: jf_primitives::pcs::prelude::PCSError) -> Self {
+        Self::Internal(value.into())
+    }
+}
+
+impl From<ark_serialize::SerializationError> for VIDError {
+    fn from(value: ark_serialize::SerializationError) -> Self {
         Self::Internal(value.into())
     }
 }
