@@ -9,6 +9,7 @@ homepage = "https://github.com/EspressoSystems/hotshot-primitives"
 repository = "https://github.com/EspressoSystems/hotshot-primitives"
 
 [dependencies]
+anyhow = "1.0"
 ark-std = { version = "0.4.0", default-features = false }
 ark-poly = "0.4.0"
 ark-bls12-381 = "0.4.0"
@@ -21,6 +22,7 @@ jf-primitives = { path = "../jellyfish/primitives" }
 jf-utils = { path = "../jellyfish/utilities" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 sha2 = { version = "0.10" }
+thiserror = "1.0"
 
 [features]
 default = ["parallel"]

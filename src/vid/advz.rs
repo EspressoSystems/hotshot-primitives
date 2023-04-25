@@ -1,7 +1,7 @@
 //! Implementation of VID from https://eprint.iacr.org/2021/1500
 //! Why call it `advz`? authors Alhaddad-Duan-Varia-Zhang
 
-use super::VID;
+use super::{VIDError, VIDResult, VID};
 use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::{DenseUVPolynomial, Polynomial};
@@ -41,12 +41,9 @@ where
     P: PolynomialCommitmentScheme,
 {
     /// TODO we desperately need better error handling
-    pub fn new(
-        reconstruction_size: usize,
-        num_storage_nodes: usize,
-    ) -> Result<Self, PrimitivesError> {
+    pub fn new(reconstruction_size: usize, num_storage_nodes: usize) -> VIDResult<Self> {
         if num_storage_nodes < reconstruction_size {
-            return Err(PrimitivesError::ParameterError(format!(
+            return Err(VIDError::Argument(format!(
                 "reconstruction_size {} exceeds num_storage_nodes {}",
                 reconstruction_size, num_storage_nodes
             )));
@@ -89,7 +86,7 @@ where
     type Share = Share<P>;
     type Bcast = Vec<P::Commitment>;
 
-    fn commit(&self, payload: &[u8]) -> Result<Self::Commitment, PrimitivesError> {
+    fn commit(&self, payload: &[u8]) -> VIDResult<Self::Commitment> {
         let mut hasher = Sha256::new();
 
         // TODO perf: DenseUVPolynomial::from_coefficients_slice copies the slice.
@@ -104,15 +101,11 @@ where
         Ok(hasher.finalize())
     }
 
-    fn disperse(&self, payload: &[u8]) -> Result<(Vec<Self::Share>, Self::Bcast), PrimitivesError> {
+    fn disperse(&self, payload: &[u8]) -> VIDResult<(Vec<Self::Share>, Self::Bcast)> {
         self.disperse_elems(&bytes_to_field_elements(payload))
     }
 
-    fn verify_share(
-        &self,
-        share: &Self::Share,
-        bcast: &Self::Bcast,
-    ) -> Result<(), jf_primitives::errors::PrimitivesError> {
+    fn verify_share(&self, share: &Self::Share, bcast: &Self::Bcast) -> VIDResult<Result<(), ()>> {
         assert_eq!(share.evals.len(), bcast.len());
 
         let id: P::Point = P::Point::from(share.id as u64);
@@ -162,19 +155,13 @@ where
         )
         .unwrap();
         if !success {
-            return Err(PrimitivesError::VerificationError(
-                "aggregate verification failed".into(),
-            ));
+            return Ok(Err(()));
         }
 
-        Ok(())
+        Ok(Ok(()))
     }
 
-    fn recover_payload(
-        &self,
-        shares: &[Self::Share],
-        bcast: &Self::Bcast,
-    ) -> Result<Vec<u8>, jf_primitives::errors::PrimitivesError> {
+    fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VIDResult<Vec<u8>> {
         Ok(bytes_from_field_elements(self.recover_elems(shares, bcast)?).unwrap())
     }
 }
@@ -190,8 +177,7 @@ where
     pub fn disperse_elems(
         &self,
         payload: &[P::Evaluation],
-    ) -> Result<(Vec<<Advz<P, T> as VID>::Share>, <Advz<P, T> as VID>::Bcast), PrimitivesError>
-    {
+    ) -> VIDResult<(Vec<<Advz<P, T> as VID>::Share>, <Advz<P, T> as VID>::Bcast)> {
         let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
 
         // polys: partition payload into polynomial coefficients
@@ -292,21 +278,33 @@ where
         &self,
         shares: &[<Advz<P, T> as VID>::Share],
         _bcast: &<Advz<P, T> as VID>::Bcast,
-    ) -> Result<Vec<P::Evaluation>, PrimitivesError> {
+    ) -> VIDResult<Vec<P::Evaluation>> {
         if shares.len() < self.reconstruction_size {
-            return Err(PrimitivesError::ParameterError("not enough shares".into()));
+            return Err(VIDError::Argument(format!(
+                "not enough shares {}, expected at least {}",
+                shares.len(),
+                self.reconstruction_size
+            )));
         }
 
-        // all shares must have equal data len
+        // all shares must have equal evals len
         let num_polys = shares
             .first()
-            .ok_or(PrimitivesError::ParameterError("not enough shares".into()))?
+            .ok_or_else(|| VIDError::Argument("shares is empty".into()))?
             .evals
             .len();
-        if shares.iter().any(|s| s.evals.len() != num_polys) {
-            return Err(PrimitivesError::ParameterError(
-                "shares do not have equal data lengths".into(),
-            ));
+        if let Some((index, share)) = shares
+            .iter()
+            .enumerate()
+            .find(|(_, s)| s.evals.len() != num_polys)
+        {
+            return Err(VIDError::Argument(format!(
+                "shares do not have equal evals lengths: share {} len {}, share {} len {}",
+                0,
+                num_polys,
+                index,
+                share.evals.len()
+            )));
         }
 
         let result_len = num_polys * self.reconstruction_size;
@@ -323,6 +321,12 @@ where
         }
         assert_eq!(result.len(), result_len);
         Ok(result)
+    }
+}
+
+impl From<PrimitivesError> for VIDError {
+    fn from(value: PrimitivesError) -> Self {
+        Self::Internal(value.into())
     }
 }
 
@@ -371,7 +375,7 @@ mod tests {
                 assert_eq!(shares.len(), num_storage_nodes);
 
                 for share in shares.iter() {
-                    vid.verify_share(share, &bcast).unwrap();
+                    vid.verify_share(share, &bcast).unwrap().unwrap();
                 }
 
                 // sample a random subset of shares with size reconstruction_size
