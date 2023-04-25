@@ -18,10 +18,7 @@ use jf_primitives::{
 };
 use jf_utils::test_rng;
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
-use sha2::{
-    digest::generic_array::{typenum::U32, GenericArray},
-    Digest, Sha256,
-};
+use sha2::{Digest, Sha256};
 
 pub struct Advz<P, T>
 where
@@ -79,9 +76,7 @@ where
     P::Commitment: From<T> + AsRef<T>,                                                    // 3
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
 {
-    // TODO sucks that I need `GenericArray` here. You'd think the `sha2` crate would export a type alias for hash outputs.
-    type Commitment = GenericArray<u8, U32>;
-    // type Commitment = sha2::Digest::Output;
+    type Commitment = sha2::digest::crypto_common::Output<sha2::Sha256>; // SHA-256 output type
 
     type Share = Share<P>;
     type Bcast = Vec<P::Commitment>;
