@@ -122,8 +122,9 @@ where
         // compute my scalar
         let scalar: P::Evaluation = {
             let mut hasher = Sha256::new().chain_update(payload_commitment);
-            let hasher_to_field =
-                <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
+            let hasher_to_field = <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(
+                HASH_TO_FIELD_DOMAIN_SEP,
+            );
             for eval in share.evals.iter() {
                 eval.serialize_uncompressed(&mut hasher)?;
             }
@@ -222,8 +223,9 @@ where
         // - `HashToField` does not expose an incremental API (ie. `update`)
         //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
         let hasher = Sha256::new().chain_update(payload_commit);
-        let hasher_to_field =
-            <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(&[1, 2, 3]); // TODO domain separator
+        let hasher_to_field = <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(
+            HASH_TO_FIELD_DOMAIN_SEP,
+        );
         let storage_node_scalars: Vec<P::Evaluation> = storage_node_evals
             .iter()
             .map(|evals| {
@@ -321,6 +323,8 @@ where
         Ok(result)
     }
 }
+
+const HASH_TO_FIELD_DOMAIN_SEP: &[u8; 4] = b"rick";
 
 /// # Goal:
 /// `anyhow::Error` has the property that `?` magically coerces the error into `anyhow::Error`.
