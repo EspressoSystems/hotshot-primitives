@@ -1,4 +1,4 @@
-//! Implementation of VID from https://eprint.iacr.org/2021/1500
+//! Implementation of Verifiable Information Dispersal (VID) from https://eprint.iacr.org/2021/1500
 //! `Avdz` named for the authors Alhaddad-Duan-Varia-Zhang
 
 use super::{VIDError, VIDResult, VID};
@@ -61,7 +61,7 @@ pub struct Share<P>
 where
     P: PolynomialCommitmentScheme,
 {
-    id: usize,
+    index: usize,
     evals: Vec<P::Evaluation>,
     proof: P::Proof,
 }
@@ -103,8 +103,6 @@ where
     fn verify_share(&self, share: &Self::Share, bcast: &Self::Bcast) -> VIDResult<Result<(), ()>> {
         assert_eq!(share.evals.len(), bcast.len());
 
-        let id: P::Point = P::Point::from(share.id as u64);
-
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
             let mut hasher = Sha256::new();
@@ -145,7 +143,7 @@ where
         Ok(P::verify(
             &self.vk,
             &aggregate_commit,
-            &id,
+            &Self::index_to_point(share.index),
             &aggregate_value,
             &share.proof,
         )?
@@ -256,10 +254,10 @@ where
                                 poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
                             )
                         });
-                    let id = P::Point::from((index + 1) as u64);
-                    let (proof, _value) = P::open(&self.ck, &storage_node_poly, &id)?;
+                    let (proof, _value) =
+                        P::open(&self.ck, &storage_node_poly, &Self::index_to_point(index))?;
                     Ok(Share {
-                        id: index + 1,
+                        index,
                         evals,
                         proof,
                     })
@@ -307,7 +305,7 @@ where
         for i in 0..num_polys {
             let mut coeffs = ReedSolomonErasureCode::decode(
                 shares.iter().map(|s| ReedSolomonErasureCodeShare {
-                    index: s.id,
+                    index: s.index + 1, // 1-based index for ReedSolomonErasureCodeShare
                     value: s.evals[i],
                 }),
                 self.reconstruction_size,
@@ -316,6 +314,10 @@ where
         }
         assert_eq!(result.len(), result_len);
         Ok(result)
+    }
+
+    fn index_to_point(index: usize) -> P::Point {
+        P::Point::from((index + 1) as u64)
     }
 }
 
