@@ -1,28 +1,39 @@
 //! Utilities for maintaining a local stake table
 
+use super::{error::StakeTableError, EncodedPublicKey};
+use ark_ff::Field;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{sync::Arc, vec::Vec};
+use jf_primitives::crhf::{FixedLengthRescueCRHF, CRHF};
 use jf_utils::canonical;
 use serde::{Deserialize, Serialize};
-use sha3::{Digest, Keccak256};
 use tagged_base64::tagged;
 
-/// Branch for Merkle tree, must be a power of 2
-const TREE_BRANCH: usize = 16;
-/// Log2(TREE_BRANCH)
-const LOG2_TREE_BRANCH: usize = 4;
+/// Branch of merkle tree.
+/// Set to 3 because we are currently using RATE-3 rescue hash function
+const TREE_BRANCH: usize = 3;
 
-/// Copied from HotShot repo.
-/// Type saftey wrapper for byte encoded keys.
-#[tagged("PUBKEY")]
-#[derive(
-    Clone, Debug, Hash, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq, PartialOrd, Ord,
-)]
-pub struct EncodedPublicKey(pub Vec<u8>);
+/// Underlying field for rescue hash function
+type F = ark_bn254::Fq;
+
+/// Using rescue hash function
+type Digest = FixedLengthRescueCRHF<F, 3, 1>;
 
 #[tagged("MERKLE_COMM")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
-pub struct MerkleCommitment([u8; 32]);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
+pub struct MerkleCommitment(F);
+
+impl AsRef<F> for MerkleCommitment {
+    fn as_ref(&self) -> &F {
+        &self.0
+    }
+}
+
+impl From<F> for MerkleCommitment {
+    fn from(value: F) -> Self {
+        MerkleCommitment(value)
+    }
+}
 
 /// A persistent merkle tree tailored for the stake table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -51,20 +62,20 @@ impl PersistentMerkleNode {
     }
 
     /// Returns the succint commitment of this subtree
-    pub fn commitment(&self) -> &MerkleCommitment {
+    pub fn commitment(&self) -> MerkleCommitment {
         match self {
-            PersistentMerkleNode::Empty => &MerkleCommitment([0u8; 32]),
+            PersistentMerkleNode::Empty => MerkleCommitment(F::from(0u64)),
             PersistentMerkleNode::Branch {
                 comm,
                 children: _,
                 num_keys: _,
                 total_stakes: _,
-            } => comm,
+            } => *comm,
             PersistentMerkleNode::Leaf {
                 comm,
                 key: _,
                 value: _,
-            } => comm,
+            } => *comm,
         }
     }
 
@@ -153,11 +164,65 @@ impl PersistentMerkleNode {
         }
     }
 
-    pub fn batch_update(&self, height: usize) -> Self {
+    /// Persistent update of a merkle tree
+    /// Instead of direct modify the tree content, it will create a new copy for the affected Merkle path and modify upon it.
+    pub fn update(
+        &self,
+        height: usize,
+        path: &[usize],
+        key: &EncodedPublicKey,
+        delta: u64,
+    ) -> Result<Self, StakeTableError> {
+        match self {
+            PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
+            PersistentMerkleNode::Branch {
+                comm: _,
+                children,
+                num_keys: _,
+                total_stakes: _,
+            } => {
+                let mut children = children.clone();
+                children[path[height - 1]] =
+                    Arc::new(children[path[height - 1]].update(height - 1, path, key, delta)?);
+                let num_keys = children.iter().map(|child| child.num_keys()).sum();
+                let total_stakes = children.iter().map(|child| child.total_stakes()).sum();
+                let comm = MerkleCommitment(
+                    Digest::evaluate(children.clone().map(|child| child.commitment().0))
+                        .map_err(|_| StakeTableError::RescueError)?[0],
+                );
+                Ok(PersistentMerkleNode::Branch {
+                    comm,
+                    children,
+                    num_keys,
+                    total_stakes,
+                })
+            }
+            PersistentMerkleNode::Leaf {
+                comm: _,
+                key: _,
+                value,
+            } => {
+                let input = [
+                    F::from(0u64),
+                    <F as Field>::from_random_bytes(&key.0).unwrap(),
+                    F::from(*value),
+                ];
+                Ok(PersistentMerkleNode::Leaf {
+                    comm: MerkleCommitment(
+                        Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
+                    ),
+                    key: key.clone(),
+                    value: *value + delta,
+                })
+            }
+        }
+    }
+
+    pub fn register(&self, height: usize, path: &[usize], key: &EncodedPublicKey) -> Option<Self> {
+        todo!()
+    }
+
+    pub fn remove(&self, height: usize, path: &[usize], key: &EncodedPublicKey) -> Option<Self> {
         todo!()
     }
 }
-
-// fn digest(input: &[u8]) -> [u8; 32] {
-//     Keccak256::digest(input).into()
-// }

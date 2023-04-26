@@ -1,28 +1,34 @@
 use self::utils::{MerkleCommitment, PersistentMerkleNode};
-use ark_std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::{collections::HashMap, vec::Vec};
 use serde::{Deserialize, Serialize};
+use tagged_base64::tagged;
 
 pub mod error;
-mod transactions;
 mod utils;
 
-// Re-exports
-pub use utils::EncodedPublicKey;
+/// Copied from HotShot repo.
+/// Type saftey wrapper for byte encoded keys.
+#[tagged("PUBKEY")]
+#[derive(
+    Clone, Debug, Hash, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq, PartialOrd, Ord,
+)]
+pub struct EncodedPublicKey(pub Vec<u8>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StakeTableHeader {
-    pub height: u64,
-    pub root: PersistentMerkleNode,
+    height: u64,
+    root: PersistentMerkleNode,
 }
 
 /// Locally maintained stake table
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StakeTable {
-    data: VecDeque<Arc<StakeTableHeader>>,
-    table: HashMap<u64, Arc<StakeTableHeader>>,
+    current: StakeTableHeader,
+    frozen: StakeTableHeader,
+    active: StakeTableHeader,
+
+    mapping: HashMap<EncodedPublicKey, u64>,
 }
 
 impl StakeTable {
@@ -31,15 +37,17 @@ impl StakeTable {
     }
 
     pub fn commitment(&self, height: u64) -> Option<&MerkleCommitment> {
-        self.table
-            .get(&height)
-            .map(|header| header.root.commitment())
+        todo!()
+        // self.table
+        //     .get(&height)
+        //     .map(|header| header.root.commitment())
     }
 
     pub fn total_stakes(&self, height: u64) -> Option<u64> {
-        self.table
-            .get(&height)
-            .map(|header| header.root.total_stakes())
+        todo!()
+        // self.table
+        //     .get(&height)
+        //     .map(|header| header.root.total_stakes())
     }
 }
 
