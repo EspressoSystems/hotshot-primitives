@@ -148,8 +148,8 @@ where
             &aggregate_value,
             &share.proof,
         )?
-        .then(|| ())
-        .ok_or_else(|| ()))
+        .then_some(())
+        .ok_or(()))
     }
 
     fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VIDResult<Vec<u8>> {
@@ -170,7 +170,7 @@ where
     pub fn disperse_elems(
         &self,
         payload: &[P::Evaluation],
-    ) -> VIDResult<(Vec<<Advz<P, T> as VID>::Share>, <Advz<P, T> as VID>::Bcast)> {
+    ) -> VIDResult<(Vec<<Self as VID>::Share>, <Self as VID>::Bcast)> {
         let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
 
         // polys: partition payload into polynomial coefficients
@@ -189,8 +189,8 @@ where
                 poly_commit.serialize_uncompressed(&mut hasher)?;
 
                 // TODO use batch_open_fk23
-                for index in 0..self.num_storage_nodes {
-                    storage_node_evals[index].push(poly.evaluate(&((index + 1) as u64).into()));
+                for (index, eval) in storage_node_evals.iter_mut().enumerate() {
+                    eval.push(poly.evaluate(&Self::index_to_point(index)));
                 }
 
                 polys.push(poly);
@@ -268,8 +268,8 @@ where
 
     pub fn recover_elems(
         &self,
-        shares: &[<Advz<P, T> as VID>::Share],
-        _bcast: &<Advz<P, T> as VID>::Bcast,
+        shares: &[<Self as VID>::Share],
+        _bcast: &<Self as VID>::Bcast,
     ) -> VIDResult<Vec<P::Evaluation>> {
         if shares.len() < self.reconstruction_size {
             return Err(VIDError::Argument(format!(
