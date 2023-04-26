@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
 pub mod error;
-mod utils;
+pub mod utils;
 
 /// Copied from HotShot repo.
 /// Type saftey wrapper for byte encoded keys.
@@ -32,18 +32,18 @@ pub struct StakeTable {
 }
 
 impl StakeTable {
-    pub fn lookup(&self, height: u64, key: &EncodedPublicKey) -> Option<u64> {
+    pub fn lookup(&self, _height: u64, _key: &EncodedPublicKey) -> Option<u64> {
         todo!("Implements key to merkle path")
     }
 
-    pub fn commitment(&self, height: u64) -> Option<&MerkleCommitment> {
+    pub fn commitment(&self, _height: u64) -> Option<&MerkleCommitment> {
         todo!()
         // self.table
         //     .get(&height)
         //     .map(|header| header.root.commitment())
     }
 
-    pub fn total_stakes(&self, height: u64) -> Option<u64> {
+    pub fn total_stakes(&self, _height: u64) -> Option<u64> {
         todo!()
         // self.table
         //     .get(&height)

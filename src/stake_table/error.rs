@@ -1,8 +1,15 @@
-use ark_std::string::String;
+use displaydoc::Display;
 
+#[derive(Debug, Display)]
 pub enum StakeTableError {
-    KeyNotFound,
-    MismatchedKey,
+    /// Internal error caused by Rescue
     RescueError,
-    TransactionError(String),
+    /// Key mismatched
+    MismatchedKey,
+    /// Key not found
+    KeyNotFound,
+    /// Key already exists
+    ExistingKey,
+    /// Update that will result in a negative amount of stake
+    InsufficientFund,
 }
