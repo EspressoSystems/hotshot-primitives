@@ -128,6 +128,7 @@ where
         };
 
         // compute aggregate KZG commit and aggregate polynomial eval
+        // see "TODO rfold:" comment
         let aggregate_commit = P::Commitment::from(
             bcast
                 .iter()
@@ -244,12 +245,10 @@ where
                 .map(|(index, (scalar, evals))| {
                     // Horner's method
                     let storage_node_poly =
+                        // see "TODO rfold:" comment
                         polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
                             // `Polynomial` does not impl `Mul` by scalar
                             // so we need to multiply each coeff by t
-                            // TODO refactor into a mul_by_scalar function
-                            // TODO refactor into a lin_combo function that works on anything that can be multiplied by a field element
-                            // -> can't do this because arkworks doesn't impl all the Mul, Add ops for references :sad:
                             res + P::Polynomial::from_coefficients_vec(
                                 poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
                             )
@@ -349,6 +348,13 @@ impl From<ark_serialize::SerializationError> for VIDError {
         Self::Internal(value.into())
     }
 }
+
+// TODO rfold: Use of `rfold` in this source file should be refactored into a
+// function that works on anything that can be multiplied by a field element.
+// Unfortunately, the concrete arkworks types involved in each of our uses of
+// `rfold` offer a different subset of the needed traits `Mul`, `Add`, etc.
+// Thus, any attempt to refactor would not improve code readability or
+// maintainability. :sad:
 
 #[cfg(test)]
 mod tests {
