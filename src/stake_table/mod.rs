@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
 pub mod error;
+// TODO(Chengyu): temporarily export for clippy
 pub mod utils;
 
 /// Copied from HotShot repo.
@@ -22,6 +23,7 @@ pub struct StakeTableHeader {
 }
 
 /// Locally maintained stake table
+/// TODO(Chengyu): implement this
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StakeTable {
     current: StakeTableHeader,
@@ -38,19 +40,13 @@ impl StakeTable {
 
     pub fn commitment(&self, _height: u64) -> Option<&MerkleCommitment> {
         todo!()
-        // self.table
-        //     .get(&height)
-        //     .map(|header| header.root.commitment())
     }
 
     pub fn total_stakes(&self, _height: u64) -> Option<u64> {
         todo!()
-        // self.table
-        //     .get(&height)
-        //     .map(|header| header.root.total_stakes())
     }
 }
 
-// TODO: tests
+// TODO(Chengyu): tests
 #[cfg(test)]
 mod tests {}
