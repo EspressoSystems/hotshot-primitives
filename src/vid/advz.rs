@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn commit_basic_correctness() {
+    fn commit_infallibility() {
         let mut rng = test_rng();
         let lengths = [2, 16, 32, 48, 63, 64, 65, 100, 200];
         let vid = Advz::<PCS, G>::new(2, 3).unwrap();

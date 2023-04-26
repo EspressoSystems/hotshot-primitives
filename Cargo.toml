@@ -10,12 +10,12 @@ repository = "https://github.com/EspressoSystems/hotshot-primitives"
 
 [dependencies]
 anyhow = "1.0"
-ark-std = { version = "0.4.0", default-features = false }
-ark-poly = "0.4.0"
 ark-bls12-381 = "0.4.0"
 ark-ec = "0.4.0"
-ark-serialize = "0.4.0"
 ark-ff = "0.4.0"
+ark-poly = "0.4.0"
+ark-serialize = "0.4.0"
+ark-std = { version = "0.4.0", default-features = false }
 # jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
 jf-primitives = { path = "../jellyfish/primitives" }
 # jf-utils = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }

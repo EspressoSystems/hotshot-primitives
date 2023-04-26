@@ -8,7 +8,7 @@ pub enum VidError {
     #[error("invalid arguments: {0}")]
     Argument(String),
     #[error(transparent)]
-    Internal(#[from] anyhow::Error), // could be any error
+    Internal(#[from] anyhow::Error),
 }
 
 type VidResult<T> = Result<T, VidError>;
