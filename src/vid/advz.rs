@@ -18,7 +18,7 @@ use jf_primitives::{
 };
 use jf_utils::test_rng;
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
-use sha2::{Digest, Sha256};
+use sha2::{digest::crypto_common::Output, Digest, Sha256};
 
 pub struct Advz<P, T>
 where
@@ -69,6 +69,7 @@ where
 /// Explanation of trait bounds:
 /// 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
 /// 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
+/// TODO switch to `UnivariatePCS` after https://github.com/EspressoSystems/jellyfish/pull/231
 impl<P, T> VID for Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
@@ -76,8 +77,7 @@ where
     P::Commitment: From<T> + AsRef<T>,                                                    // 3
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
 {
-    type Commitment = sha2::digest::crypto_common::Output<sha2::Sha256>; // SHA-256 output type
-
+    type Commitment = Output<sha2::Sha256>; // Sha256 hash
     type Share = Share<P>;
     type Bcast = Vec<P::Commitment>;
 
@@ -156,7 +156,7 @@ where
     fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VIDResult<Vec<u8>> {
         Ok(bytes_from_field_elements(
             self.recover_elems(shares, bcast)?,
-        )?)
+        ))
     }
 }
 
