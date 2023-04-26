@@ -1,7 +1,7 @@
 //! Implementation of Verifiable Information Dispersal (VID) from https://eprint.iacr.org/2021/1500
 //! `Avdz` named for the authors Alhaddad-Duan-Varia-Zhang
 
-use super::{VIDError, VIDResult, VID};
+use super::{Vid, VidError, VidResult};
 use anyhow::anyhow;
 use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
@@ -38,9 +38,9 @@ impl<P, T> Advz<P, T>
 where
     P: PolynomialCommitmentScheme,
 {
-    pub fn new(reconstruction_size: usize, num_storage_nodes: usize) -> VIDResult<Self> {
+    pub fn new(reconstruction_size: usize, num_storage_nodes: usize) -> VidResult<Self> {
         if num_storage_nodes < reconstruction_size {
-            return Err(VIDError::Argument(format!(
+            return Err(VidError::Argument(format!(
                 "reconstruction_size {} exceeds num_storage_nodes {}",
                 reconstruction_size, num_storage_nodes
             )));
@@ -70,7 +70,7 @@ where
 /// 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
 /// 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
 /// TODO switch to `UnivariatePCS` after https://github.com/EspressoSystems/jellyfish/pull/231
-impl<P, T> VID for Advz<P, T>
+impl<P, T> Vid for Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
@@ -81,7 +81,7 @@ where
     type Share = Share<P>;
     type Bcast = Vec<P::Commitment>;
 
-    fn commit(&self, payload: &[u8]) -> VIDResult<Self::Commitment> {
+    fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment> {
         let mut hasher = Sha256::new();
 
         // TODO perf: DenseUVPolynomial::from_coefficients_slice copies the slice.
@@ -96,11 +96,11 @@ where
         Ok(hasher.finalize())
     }
 
-    fn disperse(&self, payload: &[u8]) -> VIDResult<(Vec<Self::Share>, Self::Bcast)> {
+    fn disperse(&self, payload: &[u8]) -> VidResult<(Vec<Self::Share>, Self::Bcast)> {
         self.disperse_elems(&bytes_to_field_elements(payload))
     }
 
-    fn verify_share(&self, share: &Self::Share, bcast: &Self::Bcast) -> VIDResult<Result<(), ()>> {
+    fn verify_share(&self, share: &Self::Share, bcast: &Self::Bcast) -> VidResult<Result<(), ()>> {
         assert_eq!(share.evals.len(), bcast.len());
 
         // compute payload commitment from polynomial commitments
@@ -152,7 +152,7 @@ where
         .ok_or(()))
     }
 
-    fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VIDResult<Vec<u8>> {
+    fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VidResult<Vec<u8>> {
         Ok(bytes_from_field_elements(
             self.recover_elems(shares, bcast)?,
         ))
@@ -170,13 +170,13 @@ where
     pub fn disperse_elems(
         &self,
         payload: &[P::Evaluation],
-    ) -> VIDResult<(Vec<<Self as VID>::Share>, <Self as VID>::Bcast)> {
+    ) -> VidResult<(Vec<<Self as Vid>::Share>, <Self as Vid>::Bcast)> {
         let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
 
         // polys: partition payload into polynomial coefficients
         // poly_commits: for result bcast
         // storage_node_evals: evaluate polys at many points for erasure-coded result shares
-        // payload_commit: same as in VID::commit
+        // payload_commit: same as in Vid::commit
         let (polys, poly_commits, storage_node_evals, payload_commit) = {
             let mut hasher = Sha256::new();
             let mut polys = Vec::with_capacity(num_polys);
@@ -268,11 +268,11 @@ where
 
     pub fn recover_elems(
         &self,
-        shares: &[<Self as VID>::Share],
-        _bcast: &<Self as VID>::Bcast,
-    ) -> VIDResult<Vec<P::Evaluation>> {
+        shares: &[<Self as Vid>::Share],
+        _bcast: &<Self as Vid>::Bcast,
+    ) -> VidResult<Vec<P::Evaluation>> {
         if shares.len() < self.reconstruction_size {
-            return Err(VIDError::Argument(format!(
+            return Err(VidError::Argument(format!(
                 "not enough shares {}, expected at least {}",
                 shares.len(),
                 self.reconstruction_size
@@ -282,7 +282,7 @@ where
         // all shares must have equal evals len
         let num_polys = shares
             .first()
-            .ok_or_else(|| VIDError::Argument("shares is empty".into()))?
+            .ok_or_else(|| VidError::Argument("shares is empty".into()))?
             .evals
             .len();
         if let Some((index, share)) = shares
@@ -290,7 +290,7 @@ where
             .enumerate()
             .find(|(_, s)| s.evals.len() != num_polys)
         {
-            return Err(VIDError::Argument(format!(
+            return Err(VidError::Argument(format!(
                 "shares do not have equal evals lengths: share {} len {}, share {} len {}",
                 0,
                 num_polys,
@@ -324,26 +324,26 @@ const HASH_TO_FIELD_DOMAIN_SEP: &[u8; 4] = b"rick";
 
 /// # Goal:
 /// `anyhow::Error` has the property that `?` magically coerces the error into `anyhow::Error`.
-/// I want the same property for `VIDError`.
+/// I want the same property for `VidError`.
 /// I don't know how to achieve this without the following boilerplate.
 ///
 /// # Boilerplate:
-/// I want to coerce any error `E` into `VIDError::Internal` similar to `anyhow::Error`.
-/// Unfortunately, I need to manually impl `From<E> for VIDError` for each `E`.
+/// I want to coerce any error `E` into `VidError::Internal` similar to `anyhow::Error`.
+/// Unfortunately, I need to manually impl `From<E> for VidError` for each `E`.
 /// Can't do a generic impl because it conflicts with `impl<T> From<T> for T` in core.
-impl From<jf_primitives::errors::PrimitivesError> for VIDError {
+impl From<jf_primitives::errors::PrimitivesError> for VidError {
     fn from(value: jf_primitives::errors::PrimitivesError) -> Self {
         Self::Internal(value.into())
     }
 }
 
-impl From<jf_primitives::pcs::prelude::PCSError> for VIDError {
+impl From<jf_primitives::pcs::prelude::PCSError> for VidError {
     fn from(value: jf_primitives::pcs::prelude::PCSError) -> Self {
         Self::Internal(value.into())
     }
 }
 
-impl From<ark_serialize::SerializationError> for VIDError {
+impl From<ark_serialize::SerializationError> for VidError {
     fn from(value: ark_serialize::SerializationError) -> Self {
         Self::Internal(value.into())
     }
