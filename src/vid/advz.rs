@@ -79,7 +79,7 @@ where
     P::Commitment: From<T> + AsRef<T>,                                                    // 3
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
 {
-    type Commitment = Output<sha2::Sha256>; // Sha256 hash
+    type Commitment = Output<Sha256>;
     type Share = Share<P>;
     type Bcast = Vec<P::Commitment>;
 
