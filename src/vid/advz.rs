@@ -7,7 +7,7 @@ use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_serialize::CanonicalSerialize;
-use ark_std::{format, marker::PhantomData, vec, vec::Vec, Zero};
+use ark_std::{borrow::Borrow, format, marker::PhantomData, vec, vec::Vec, Zero};
 
 use jf_primitives::{
     erasure_code::{
@@ -16,7 +16,6 @@ use jf_primitives::{
     },
     pcs::PolynomialCommitmentScheme,
 };
-use jf_utils::test_rng;
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 use sha2::{digest::crypto_common::Output, Digest, Sha256};
 
@@ -38,15 +37,18 @@ impl<P, T> Advz<P, T>
 where
     P: PolynomialCommitmentScheme,
 {
-    pub fn new(reconstruction_size: usize, num_storage_nodes: usize) -> VidResult<Self> {
+    pub fn new(
+        reconstruction_size: usize,
+        num_storage_nodes: usize,
+        srs: impl Borrow<P::SRS>,
+    ) -> VidResult<Self> {
         if num_storage_nodes < reconstruction_size {
             return Err(VidError::Argument(format!(
                 "reconstruction_size {} exceeds num_storage_nodes {}",
                 reconstruction_size, num_storage_nodes
             )));
         }
-        let pp = P::gen_srs_for_testing(&mut test_rng(), reconstruction_size)?;
-        let (ck, vk) = P::trim(pp, reconstruction_size, None)?;
+        let (ck, vk) = P::trim(srs, reconstruction_size, None)?;
         Ok(Self {
             reconstruction_size,
             num_storage_nodes,
@@ -367,6 +369,7 @@ mod tests {
         vec,
     };
     use jf_primitives::pcs::prelude::UnivariateKzgPCS;
+    use jf_utils::test_rng;
 
     use super::*;
     type PCS = UnivariateKzgPCS<Bls12_381>;
@@ -378,6 +381,11 @@ mod tests {
         let byte_lens = [2, 16, 32, 47, 48, 49, 64, 100, 400];
 
         let mut rng = test_rng();
+        let srs = PCS::gen_srs_for_testing(
+            &mut test_rng(),
+            vid_sizes.iter().max_by_key(|v| v.0).unwrap().0,
+        )
+        .unwrap();
 
         println!(
             "modulus byte len: {}",
@@ -386,7 +394,7 @@ mod tests {
         );
 
         for (reconstruction_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS, G>::new(reconstruction_size, num_storage_nodes).unwrap();
+            let vid = Advz::<PCS, G>::new(reconstruction_size, num_storage_nodes, &srs).unwrap();
 
             for len in byte_lens {
                 println!(
@@ -416,15 +424,25 @@ mod tests {
 
     #[test]
     fn commit_infallibility() {
+        let vid_sizes = [(3, 9)];
+        let byte_lens = [2, 32, 500];
+
         let mut rng = test_rng();
-        let lengths = [2, 16, 32, 48, 63, 64, 65, 100, 200];
-        let vid = Advz::<PCS, G>::new(2, 3).unwrap();
+        let srs = PCS::gen_srs_for_testing(
+            &mut test_rng(),
+            vid_sizes.iter().max_by_key(|v| v.0).unwrap().0,
+        )
+        .unwrap();
 
-        for len in lengths {
-            let mut random_bytes = vec![0u8; len];
-            rng.fill_bytes(&mut random_bytes);
+        for (reconstruction_size, num_storage_nodes) in vid_sizes {
+            let vid = Advz::<PCS, G>::new(reconstruction_size, num_storage_nodes, &srs).unwrap();
 
-            vid.commit(&random_bytes).unwrap();
+            for len in byte_lens {
+                let mut random_bytes = vec![0u8; len];
+                rng.fill_bytes(&mut random_bytes);
+
+                vid.commit(&random_bytes).unwrap();
+            }
         }
     }
 }
