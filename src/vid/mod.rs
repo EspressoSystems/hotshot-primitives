@@ -38,6 +38,6 @@ pub trait Vid {
     fn verify_share(&self, share: &Self::Share, bcast: &Self::Bcast) -> VidResult<Result<(), ()>>;
 
     /// Recover payload from shares.
-    /// Do not verify shares or check recovered payload against a commitment.
+    /// Do not verify shares or check recovered payload against anything.
     fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VidResult<Vec<u8>>;
 }
