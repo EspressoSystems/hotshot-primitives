@@ -23,7 +23,7 @@ pub struct Advz<P, T>
 where
     P: PolynomialCommitmentScheme,
 {
-    reconstruction_size: usize,
+    payload_chunk_size: usize,
     num_storage_nodes: usize,
     // TODO uncomment after https://github.com/EspressoSystems/jellyfish/pull/231
     // ck: <P::SRS as StructuredReferenceString>::ProverParam,
@@ -38,19 +38,19 @@ where
     P: PolynomialCommitmentScheme,
 {
     pub fn new(
-        reconstruction_size: usize,
+        payload_chunk_size: usize,
         num_storage_nodes: usize,
         srs: impl Borrow<P::SRS>,
     ) -> VidResult<Self> {
-        if num_storage_nodes < reconstruction_size {
+        if num_storage_nodes < payload_chunk_size {
             return Err(VidError::Argument(format!(
-                "reconstruction_size {} exceeds num_storage_nodes {}",
-                reconstruction_size, num_storage_nodes
+                "payload_chunk_size {} exceeds num_storage_nodes {}",
+                payload_chunk_size, num_storage_nodes
             )));
         }
-        let (ck, vk) = P::trim(srs, reconstruction_size, None)?;
+        let (ck, vk) = P::trim(srs, payload_chunk_size, None)?;
         Ok(Self {
-            reconstruction_size,
+            payload_chunk_size,
             num_storage_nodes,
             ck,
             vk,
@@ -89,7 +89,7 @@ where
         // TODO perf: DenseUVPolynomial::from_coefficients_slice copies the slice.
         // We could avoid unnecessary mem copies if bytes_to_field_elements returned Vec<Vec<F>>
         let elems = bytes_to_field_elements(payload);
-        for coeffs in elems.chunks(self.reconstruction_size) {
+        for coeffs in elems.chunks(self.payload_chunk_size) {
             let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
             let commitment = P::commit(&self.ck, &poly)?;
             commitment.serialize_uncompressed(&mut hasher)?;
@@ -173,7 +173,7 @@ where
         &self,
         payload: &[P::Evaluation],
     ) -> VidResult<(Vec<<Self as Vid>::Share>, <Self as Vid>::Bcast)> {
-        let num_polys = (payload.len() - 1) / self.reconstruction_size + 1;
+        let num_polys = (payload.len() - 1) / self.payload_chunk_size + 1;
 
         // polys: partition payload into polynomial coefficients
         // poly_commits: for result bcast
@@ -185,7 +185,7 @@ where
             let mut poly_commits = Vec::with_capacity(num_polys);
             let mut storage_node_evals =
                 vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
-            for coeffs in payload.chunks(self.reconstruction_size) {
+            for coeffs in payload.chunks(self.payload_chunk_size) {
                 let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
                 let poly_commit = P::commit(&self.ck, &poly)?;
                 poly_commit.serialize_uncompressed(&mut hasher)?;
@@ -273,11 +273,11 @@ where
         shares: &[<Self as Vid>::Share],
         _bcast: &<Self as Vid>::Bcast,
     ) -> VidResult<Vec<P::Evaluation>> {
-        if shares.len() < self.reconstruction_size {
+        if shares.len() < self.payload_chunk_size {
             return Err(VidError::Argument(format!(
                 "not enough shares {}, expected at least {}",
                 shares.len(),
-                self.reconstruction_size
+                self.payload_chunk_size
             )));
         }
 
@@ -301,7 +301,7 @@ where
             )));
         }
 
-        let result_len = num_polys * self.reconstruction_size;
+        let result_len = num_polys * self.payload_chunk_size;
         let mut result = Vec::with_capacity(result_len);
         for i in 0..num_polys {
             let mut coeffs = ReedSolomonErasureCode::decode(
@@ -309,7 +309,7 @@ where
                     index: s.index + 1, // 1-based index for ReedSolomonErasureCodeShare
                     value: s.evals[i],
                 }),
-                self.reconstruction_size,
+                self.payload_chunk_size,
             )?;
             result.append(&mut coeffs);
         }
@@ -393,13 +393,13 @@ mod tests {
                 ::MODULUS_BIT_SIZE - 7)/8 + 1
         );
 
-        for (reconstruction_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS, G>::new(reconstruction_size, num_storage_nodes, &srs).unwrap();
+        for (payload_chunk_size, num_storage_nodes) in vid_sizes {
+            let vid = Advz::<PCS, G>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
 
             for len in byte_lens {
                 println!(
                     "m: {} n: {} byte_len: {}",
-                    reconstruction_size, num_storage_nodes, len
+                    payload_chunk_size, num_storage_nodes, len
                 );
 
                 let mut bytes_random = vec![0u8; len];
@@ -412,9 +412,9 @@ mod tests {
                     vid.verify_share(share, &bcast).unwrap().unwrap();
                 }
 
-                // sample a random subset of shares with size reconstruction_size
+                // sample a random subset of shares with size payload_chunk_size
                 shares.shuffle(&mut rng);
-                let shares = &shares[..reconstruction_size];
+                let shares = &shares[..payload_chunk_size];
 
                 let bytes_recovered = vid.recover_payload(shares, &bcast).unwrap();
                 assert_eq!(bytes_recovered, bytes_random);
@@ -434,8 +434,8 @@ mod tests {
         )
         .unwrap();
 
-        for (reconstruction_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS, G>::new(reconstruction_size, num_storage_nodes, &srs).unwrap();
+        for (payload_chunk_size, num_storage_nodes) in vid_sizes {
+            let vid = Advz::<PCS, G>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
 
             for len in byte_lens {
                 let mut random_bytes = vec![0u8; len];
