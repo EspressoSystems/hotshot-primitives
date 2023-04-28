@@ -14,7 +14,8 @@ pub enum VidError {
 type VidResult<T> = Result<T, VidError>;
 
 /// VID: Verifiable Information Dispersal
-pub trait Vid {
+/// See <https://arxiv.org/abs/2111.12323> section 1.3--1.4 for intro to VID semantics.
+pub trait VidScheme {
     /// Payload commitment.
     type Commitment;
 

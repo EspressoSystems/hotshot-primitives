@@ -1,7 +1,7 @@
 //! Implementation of Verifiable Information Dispersal (VID) from https://eprint.iacr.org/2021/1500
 //! `Avdz` named for the authors Alhaddad-Duan-Varia-Zhang
 
-use super::{Vid, VidError, VidResult};
+use super::{VidError, VidResult, VidScheme};
 use anyhow::anyhow;
 use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
@@ -72,7 +72,7 @@ where
 /// 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
 /// 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
 /// TODO switch to `UnivariatePCS` after https://github.com/EspressoSystems/jellyfish/pull/231
-impl<P, T> Vid for Advz<P, T>
+impl<P, T> VidScheme for Advz<P, T>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
@@ -172,7 +172,7 @@ where
     pub fn disperse_elems(
         &self,
         payload: &[P::Evaluation],
-    ) -> VidResult<(Vec<<Self as Vid>::Share>, <Self as Vid>::Bcast)> {
+    ) -> VidResult<(Vec<<Self as VidScheme>::Share>, <Self as VidScheme>::Bcast)> {
         let num_polys = (payload.len() - 1) / self.payload_chunk_size + 1;
 
         // polys: partition payload into polynomial coefficients
@@ -270,8 +270,8 @@ where
 
     pub fn recover_elems(
         &self,
-        shares: &[<Self as Vid>::Share],
-        _bcast: &<Self as Vid>::Bcast,
+        shares: &[<Self as VidScheme>::Share],
+        _bcast: &<Self as VidScheme>::Bcast,
     ) -> VidResult<Vec<P::Evaluation>> {
         if shares.len() < self.payload_chunk_size {
             return Err(VidError::Argument(format!(
