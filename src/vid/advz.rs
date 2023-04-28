@@ -80,8 +80,8 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
 {
     type Commitment = Output<Sha256>;
-    type Share = Share<P>;
-    type Bcast = Vec<P::Commitment>;
+    type StorageShare = Share<P>;
+    type StorageCommon = Vec<P::Commitment>;
 
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment> {
         let mut hasher = Sha256::new();
@@ -98,11 +98,18 @@ where
         Ok(hasher.finalize())
     }
 
-    fn disperse(&self, payload: &[u8]) -> VidResult<(Vec<Self::Share>, Self::Bcast)> {
-        self.disperse_elems(&bytes_to_field_elements(payload))
+    fn dispersal_data(
+        &self,
+        payload: &[u8],
+    ) -> VidResult<(Vec<Self::StorageShare>, Self::StorageCommon)> {
+        self.dispersal_data_from_elems(&bytes_to_field_elements(payload))
     }
 
-    fn verify_share(&self, share: &Self::Share, bcast: &Self::Bcast) -> VidResult<Result<(), ()>> {
+    fn verify_share(
+        &self,
+        share: &Self::StorageShare,
+        bcast: &Self::StorageCommon,
+    ) -> VidResult<Result<(), ()>> {
         assert_eq!(share.evals.len(), bcast.len());
 
         // compute payload commitment from polynomial commitments
@@ -154,7 +161,11 @@ where
         .ok_or(()))
     }
 
-    fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VidResult<Vec<u8>> {
+    fn recover_payload(
+        &self,
+        shares: &[Self::StorageShare],
+        bcast: &Self::StorageCommon,
+    ) -> VidResult<Vec<u8>> {
         Ok(bytes_from_field_elements(
             self.recover_elems(shares, bcast)?,
         ))
@@ -169,10 +180,13 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,
 {
     /// Compute shares to send to the storage nodes
-    pub fn disperse_elems(
+    pub fn dispersal_data_from_elems(
         &self,
         payload: &[P::Evaluation],
-    ) -> VidResult<(Vec<<Self as VidScheme>::Share>, <Self as VidScheme>::Bcast)> {
+    ) -> VidResult<(
+        Vec<<Self as VidScheme>::StorageShare>,
+        <Self as VidScheme>::StorageCommon,
+    )> {
         let num_polys = (payload.len() - 1) / self.payload_chunk_size + 1;
 
         // polys: partition payload into polynomial coefficients
@@ -270,8 +284,8 @@ where
 
     pub fn recover_elems(
         &self,
-        shares: &[<Self as VidScheme>::Share],
-        _bcast: &<Self as VidScheme>::Bcast,
+        shares: &[<Self as VidScheme>::StorageShare],
+        _bcast: &<Self as VidScheme>::StorageCommon,
     ) -> VidResult<Vec<P::Evaluation>> {
         if shares.len() < self.payload_chunk_size {
             return Err(VidError::Argument(format!(
@@ -405,7 +419,7 @@ mod tests {
                 let mut bytes_random = vec![0u8; len];
                 rng.fill_bytes(&mut bytes_random);
 
-                let (mut shares, bcast) = vid.disperse(&bytes_random).unwrap();
+                let (mut shares, bcast) = vid.dispersal_data(&bytes_random).unwrap();
                 assert_eq!(shares.len(), num_storage_nodes);
 
                 for share in shares.iter() {

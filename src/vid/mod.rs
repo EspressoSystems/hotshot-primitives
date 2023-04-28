@@ -20,16 +20,19 @@ pub trait VidScheme {
     type Commitment;
 
     /// Share-specific data sent to a storage node.
-    type Share;
+    type StorageShare;
 
-    /// Common data broadcast to all storage nodes.
-    type Bcast;
+    /// Common data sent to all storage nodes.
+    type StorageCommon;
 
     /// Compute a payload commitment.
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment>;
 
     /// Compute shares to send to the storage nodes
-    fn disperse(&self, payload: &[u8]) -> VidResult<(Vec<Self::Share>, Self::Bcast)>;
+    fn dispersal_data(
+        &self,
+        payload: &[u8],
+    ) -> VidResult<(Vec<Self::StorageShare>, Self::StorageCommon)>;
 
     /// Verify a share. Used by both storage node and retrieval client.
     /// Why is return type a nested `Result`? See <https://sled.rs/errors>
@@ -37,9 +40,17 @@ pub trait VidScheme {
     /// - VidResult::Err in case of actual error
     /// - VidResult::Ok(Result::Err) if verification fails
     /// - VidResult::Ok(Result::Ok) if verification succeeds
-    fn verify_share(&self, share: &Self::Share, bcast: &Self::Bcast) -> VidResult<Result<(), ()>>;
+    fn verify_share(
+        &self,
+        share: &Self::StorageShare,
+        bcast: &Self::StorageCommon,
+    ) -> VidResult<Result<(), ()>>;
 
     /// Recover payload from shares.
     /// Do not verify shares or check recovered payload against anything.
-    fn recover_payload(&self, shares: &[Self::Share], bcast: &Self::Bcast) -> VidResult<Vec<u8>>;
+    fn recover_payload(
+        &self,
+        shares: &[Self::StorageShare],
+        bcast: &Self::StorageCommon,
+    ) -> VidResult<Vec<u8>>;
 }
