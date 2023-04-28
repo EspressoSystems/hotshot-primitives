@@ -31,6 +31,7 @@ pub trait Vid {
     fn disperse(&self, payload: &[u8]) -> VidResult<(Vec<Self::Share>, Self::Bcast)>;
 
     /// Verify a share. Used by both storage node and retrieval client.
+    /// Why is return type a nested `Result`? See <https://sled.rs/errors>
     /// Returns:
     /// - VidResult::Err in case of actual error
     /// - VidResult::Ok(Result::Err) if verification fails
