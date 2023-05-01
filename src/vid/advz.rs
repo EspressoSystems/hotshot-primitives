@@ -8,7 +8,7 @@ use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_serialize::CanonicalSerialize;
 use ark_std::{borrow::Borrow, format, marker::PhantomData, vec, vec::Vec, Zero};
-
+use derivative::Derivative;
 use jf_primitives::{
     erasure_code::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
@@ -59,6 +59,10 @@ where
     }
 }
 
+// Can't use `[#derive]` for `Share<P>` due to https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
+// Workaround: use `[#derivative]` with a custom bound https://mcarton.github.io/rust-derivative/latest/Debug.html#custom-bound
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub struct Share<P>
 where
     P: PolynomialCommitmentScheme,
