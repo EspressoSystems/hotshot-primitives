@@ -1,13 +1,25 @@
+//! Trait and implementation for a Verifiable Information Retrieval (VID).
+//!
+/// See <https://arxiv.org/abs/2111.12323> section 1.3--1.4 for intro to VID semantics.
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std as std; // needed for thiserror crate
 use ark_std::{fmt::Debug, string::String, vec::Vec};
 
 pub mod advz;
 
+/// The error type for `VidScheme` methods.
+///
+/// # Use of both `thiserror` and `anyhow`
+/// This library is both a producer and consumer of errors.
+/// It provides a custom error `VidError` for consumers of this library, aided by `thiserror`.
+/// Moreover, it is a consumer of errors from lower-level libraries, aided by `anyhow`.
+/// We have yet to settle on a preferred error handling philosophy.
 #[derive(thiserror::Error, Debug)]
 pub enum VidError {
+    /// Caller provided an invalid argument
     #[error("invalid arguments: {0}")]
     Argument(String),
+    /// Internal error
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -15,7 +27,6 @@ pub enum VidError {
 type VidResult<T> = Result<T, VidError>;
 
 /// VID: Verifiable Information Dispersal
-/// See <https://arxiv.org/abs/2111.12323> section 1.3--1.4 for intro to VID semantics.
 pub trait VidScheme {
     /// Payload commitment.
     type Commitment: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send

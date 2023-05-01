@@ -1,5 +1,6 @@
-//! Implementation of Verifiable Information Dispersal (VID) from https://eprint.iacr.org/2021/1500
-//! `Avdz` named for the authors Alhaddad-Duan-Varia-Zhang
+//! Implementation of Verifiable Information Dispersal (VID) from <https://eprint.iacr.org/2021/1500>.
+//!
+//! `advz` named for the authors Alhaddad-Duan-Varia-Zhang.
 
 use super::{VidError, VidResult, VidScheme};
 use anyhow::anyhow;
@@ -19,6 +20,7 @@ use jf_primitives::{
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 
+/// Concrete impl for [`VidScheme`].
 pub struct Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme,
@@ -38,6 +40,10 @@ impl<P, T, H> Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme,
 {
+    /// Return a new instance of `Self`.
+    ///
+    /// # Errors
+    /// Return [`VidError::Argument`] if `num_storage_nodes < payload_chunk_size`.
     pub fn new(
         payload_chunk_size: usize,
         num_storage_nodes: usize,
@@ -61,6 +67,7 @@ where
     }
 }
 
+/// The [`VidScheme::StorageShare`] type for [`Advz`].
 // Can't use `[#derive]` for `Share<P>` due to https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
 // Workaround: use `[#derivative]`
 #[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
@@ -74,11 +81,11 @@ where
     proof: P::Proof,
 }
 
-/// Explanation of trait bounds:
-/// 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
-/// 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
-/// 5: `H` is a hasher
-/// TODO switch to `UnivariatePCS` after https://github.com/EspressoSystems/jellyfish/pull/231
+// Explanation of trait bounds:
+// 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
+// 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
+// 5: `H` is a hasher
+// TODO switch to `UnivariatePCS` after <https://github.com/EspressoSystems/jellyfish/pull/231>
 impl<P, T, H> VidScheme for Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
@@ -188,7 +195,7 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,
     H: Digest + DynDigest + Default + Clone + Write,
 {
-    /// Compute shares to send to the storage nodes
+    /// Same as [`VidScheme::dispersal_data`] except `payload` is a slice of field elements.
     pub fn dispersal_data_from_elems(
         &self,
         payload: &[P::Evaluation],
@@ -290,6 +297,7 @@ where
         ))
     }
 
+    /// Same as [`VidScheme::recover_payload`] except returns a [`Vec`] of field elements.
     pub fn recover_elems(
         &self,
         shares: &[<Self as VidScheme>::StorageShare],
@@ -346,15 +354,17 @@ where
 
 const HASH_TO_FIELD_DOMAIN_SEP: &[u8; 4] = b"rick";
 
-/// # Goal:
-/// `anyhow::Error` has the property that `?` magically coerces the error into `anyhow::Error`.
-/// I want the same property for `VidError`.
-/// I don't know how to achieve this without the following boilerplate.
-///
-/// # Boilerplate:
-/// I want to coerce any error `E` into `VidError::Internal` similar to `anyhow::Error`.
-/// Unfortunately, I need to manually impl `From<E> for VidError` for each `E`.
-/// Can't do a generic impl because it conflicts with `impl<T> From<T> for T` in core.
+// `From` impls for `VidError`
+//
+// # Goal
+// `anyhow::Error` has the property that `?` magically coerces the error into `anyhow::Error`.
+// I want the same property for `VidError`.
+// I don't know how to achieve this without the following boilerplate.
+//
+// # Boilerplate
+// I want to coerce any error `E` into `VidError::Internal` similar to `anyhow::Error`.
+// Unfortunately, I need to manually impl `From<E> for VidError` for each `E`.
+// Can't do a generic impl because it conflicts with `impl<T> From<T> for T` in core.
 impl From<jf_primitives::errors::PrimitivesError> for VidError {
     fn from(value: jf_primitives::errors::PrimitivesError) -> Self {
         Self::Internal(value.into())
