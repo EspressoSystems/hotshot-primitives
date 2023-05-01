@@ -6,9 +6,10 @@ use anyhow::anyhow;
 use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::{DenseUVPolynomial, Polynomial};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Write};
 use ark_std::{borrow::Borrow, format, marker::PhantomData, vec, vec::Vec, Zero};
 use derivative::Derivative;
+use digest::{crypto_common::Output, Digest, DynDigest};
 use jf_primitives::{
     erasure_code::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
@@ -17,9 +18,8 @@ use jf_primitives::{
     pcs::PolynomialCommitmentScheme,
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
-use sha2::{digest::crypto_common::Output, Digest, Sha256};
 
-pub struct Advz<P, T>
+pub struct Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -30,10 +30,11 @@ where
     // vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     ck: P::ProverParam,
     vk: P::VerifierParam,
-    _phantom: PhantomData<T>, // needed for trait bounds for `PolynomialCommitmentScheme`
+    _phantom_t: PhantomData<T>, // needed for trait bounds
+    _phantom_h: PhantomData<H>, // needed for trait bounds
 }
 
-impl<P, T> Advz<P, T>
+impl<P, T, H> Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -54,7 +55,8 @@ where
             num_storage_nodes,
             ck,
             vk,
-            _phantom: PhantomData,
+            _phantom_t: PhantomData,
+            _phantom_h: PhantomData,
         })
     }
 }
@@ -75,20 +77,22 @@ where
 /// Explanation of trait bounds:
 /// 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
 /// 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
+/// 5: `H` is a hasher
 /// TODO switch to `UnivariatePCS` after https://github.com/EspressoSystems/jellyfish/pull/231
-impl<P, T> VidScheme for Advz<P, T>
+impl<P, T, H> VidScheme for Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
     P::Commitment: From<T> + AsRef<T>,                                                    // 3
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
+    H: Digest + DynDigest + Default + Clone + Write,                                      // 5
 {
-    type Commitment = Output<Sha256>;
+    type Commitment = Output<H>;
     type StorageShare = Share<P>;
     type StorageCommon = Vec<P::Commitment>;
 
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment> {
-        let mut hasher = Sha256::new();
+        let mut hasher = H::new();
 
         // TODO perf: DenseUVPolynomial::from_coefficients_slice copies the slice.
         // We could avoid unnecessary mem copies if bytes_to_field_elements returned Vec<Vec<F>>
@@ -118,7 +122,7 @@ where
 
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
-            let mut hasher = Sha256::new();
+            let mut hasher = H::new();
             for comm in bcast.iter() {
                 comm.serialize_uncompressed(&mut hasher)?;
             }
@@ -127,8 +131,8 @@ where
 
         // compute my scalar
         let scalar: P::Evaluation = {
-            let mut hasher = Sha256::new().chain_update(payload_commitment);
-            let hasher_to_field = <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(
+            let mut hasher = H::new().chain_update(payload_commitment);
+            let hasher_to_field = <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(
                 HASH_TO_FIELD_DOMAIN_SEP,
             );
             for eval in share.evals.iter() {
@@ -176,12 +180,13 @@ where
     }
 }
 
-impl<P, T> Advz<P, T>
+impl<P, T, H> Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
     P::Commitment: From<T> + AsRef<T>,
     T: AffineRepr<ScalarField = P::Evaluation>,
+    H: Digest + DynDigest + Default + Clone + Write,
 {
     /// Compute shares to send to the storage nodes
     pub fn dispersal_data_from_elems(
@@ -198,7 +203,7 @@ where
         // storage_node_evals: evaluate polys at many points for erasure-coded result shares
         // payload_commit: same as in Vid::commit
         let (polys, poly_commits, storage_node_evals, payload_commit) = {
-            let mut hasher = Sha256::new();
+            let mut hasher = H::new();
             let mut polys = Vec::with_capacity(num_polys);
             let mut poly_commits = Vec::with_capacity(num_polys);
             let mut storage_node_evals =
@@ -236,10 +241,9 @@ where
         //   (in what sense is it from "random" bytes?!)
         // - `HashToField` does not expose an incremental API (ie. `update`)
         //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
-        let hasher = Sha256::new().chain_update(payload_commit);
-        let hasher_to_field = <DefaultFieldHasher<Sha256> as HashToField<P::Evaluation>>::new(
-            HASH_TO_FIELD_DOMAIN_SEP,
-        );
+        let hasher = H::new().chain_update(payload_commit);
+        let hasher_to_field =
+            <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(HASH_TO_FIELD_DOMAIN_SEP);
         let storage_node_scalars: Vec<P::Evaluation> = storage_node_evals
             .iter()
             .map(|evals| {
@@ -388,10 +392,12 @@ mod tests {
     };
     use jf_primitives::pcs::prelude::UnivariateKzgPCS;
     use jf_utils::test_rng;
+    use sha2::Sha256;
 
     use super::*;
     type PCS = UnivariateKzgPCS<Bls12_381>;
     type G = <Bls12_381 as Pairing>::G1Affine;
+    type H = Sha256;
 
     #[test]
     fn round_trip() {
@@ -412,7 +418,7 @@ mod tests {
         );
 
         for (payload_chunk_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS, G>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
+            let vid = Advz::<PCS, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
 
             for len in byte_lens {
                 println!(
@@ -453,7 +459,7 @@ mod tests {
         .unwrap();
 
         for (payload_chunk_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS, G>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
+            let vid = Advz::<PCS, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
 
             for len in byte_lens {
                 let mut random_bytes = vec![0u8; len];
