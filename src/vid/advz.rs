@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use ark_ec::AffineRepr;
 use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
 use ark_poly::{DenseUVPolynomial, Polynomial};
-use ark_serialize::CanonicalSerialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{borrow::Borrow, format, marker::PhantomData, vec, vec::Vec, Zero};
 use derivative::Derivative;
 use jf_primitives::{
@@ -61,7 +61,7 @@ where
 
 // Can't use `[#derive]` for `Share<P>` due to https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
 // Workaround: use `[#derivative]`
-#[derive(Derivative)]
+#[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
 #[derivative(Clone, Debug, Eq, PartialEq)]
 pub struct Share<P>
 where
