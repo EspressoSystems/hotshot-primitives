@@ -60,9 +60,9 @@ where
 }
 
 // Can't use `[#derive]` for `Share<P>` due to https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
-// Workaround: use `[#derivative]` with a custom bound https://mcarton.github.io/rust-derivative/latest/Debug.html#custom-bound
+// Workaround: use `[#derivative]`
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
+#[derivative(Debug)]
 pub struct Share<P>
 where
     P: PolynomialCommitmentScheme,
