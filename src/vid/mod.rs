@@ -20,7 +20,7 @@ pub trait VidScheme {
     type Commitment: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
 
     /// Share-specific data sent to a storage node.
-    type StorageShare: Debug;
+    type StorageShare: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
 
     /// Common data sent to all storage nodes.
     type StorageCommon: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
