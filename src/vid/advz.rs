@@ -438,9 +438,22 @@ mod tests {
 
                 // sample a random subset of shares with size payload_chunk_size
                 shares.shuffle(&mut rng);
-                let shares = &shares[..payload_chunk_size];
 
-                let bytes_recovered = vid.recover_payload(shares, &bcast).unwrap();
+                // give minimum number of shares for recovery
+                let bytes_recovered = vid
+                    .recover_payload(&shares[..payload_chunk_size], &bcast)
+                    .unwrap();
+                assert_eq!(bytes_recovered, bytes_random);
+
+                // give an intermediate number of shares for recovery
+                let intermediate_num_shares = (payload_chunk_size + num_storage_nodes) / 2;
+                let bytes_recovered = vid
+                    .recover_payload(&shares[..intermediate_num_shares], &bcast)
+                    .unwrap();
+                assert_eq!(bytes_recovered, bytes_random);
+
+                // give all shares for recovery
+                let bytes_recovered = vid.recover_payload(&shares, &bcast).unwrap();
                 assert_eq!(bytes_recovered, bytes_random);
             }
         }
