@@ -1,5 +1,5 @@
 use ark_std as std; // needed for thiserror crate
-use ark_std::{string::String, vec::Vec};
+use ark_std::{fmt::Debug, string::String, vec::Vec};
 
 pub mod advz;
 
@@ -17,13 +17,13 @@ type VidResult<T> = Result<T, VidError>;
 /// See <https://arxiv.org/abs/2111.12323> section 1.3--1.4 for intro to VID semantics.
 pub trait VidScheme {
     /// Payload commitment.
-    type Commitment;
+    type Commitment: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
 
     /// Share-specific data sent to a storage node.
-    type StorageShare;
+    type StorageShare; // TODO #[derive] fails here https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
 
     /// Common data sent to all storage nodes.
-    type StorageCommon;
+    type StorageCommon: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
 
     /// Compute a payload commitment.
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment>;
