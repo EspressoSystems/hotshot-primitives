@@ -1,3 +1,4 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std as std; // needed for thiserror crate
 use ark_std::{fmt::Debug, string::String, vec::Vec};
 
@@ -20,10 +21,16 @@ pub trait VidScheme {
     type Commitment: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
 
     /// Share-specific data sent to a storage node.
-    type StorageShare: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
+    type StorageShare: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream CanonicalSerialize, CanonicalDeserialize, Hash, Send
 
     /// Common data sent to all storage nodes.
-    type StorageCommon: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
+    type StorageCommon: CanonicalSerialize
+        + CanonicalDeserialize
+        + Clone
+        + Debug
+        + Eq
+        + PartialEq
+        + Sync; // TODO missing upstream Hash, Send
 
     /// Compute a payload commitment.
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment>;
