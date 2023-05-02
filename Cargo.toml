@@ -10,7 +10,7 @@ repository = "https://github.com/EspressoSystems/hotshot-primitives"
 
 [dependencies]
 ark-std = { version = "0.4.0", default-features = false }
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.2.0" }
+jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [features]
