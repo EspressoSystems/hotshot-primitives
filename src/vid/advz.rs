@@ -5,10 +5,21 @@
 use super::{VidError, VidResult, VidScheme};
 use anyhow::anyhow;
 use ark_ec::AffineRepr;
-use ark_ff::fields::field_hashers::{DefaultFieldHasher, HashToField};
+use ark_ff::{
+    fields::field_hashers::{DefaultFieldHasher, HashToField},
+    Field,
+};
 use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Write};
-use ark_std::{borrow::Borrow, format, marker::PhantomData, vec, vec::Vec, Zero};
+use ark_std::{
+    borrow::Borrow,
+    format,
+    marker::PhantomData,
+    ops::{Add, Mul},
+    vec,
+    vec::Vec,
+    Zero,
+};
 use derivative::Derivative;
 use digest::{crypto_common::Output, Digest, DynDigest};
 use jf_primitives::{
@@ -136,7 +147,7 @@ where
             hasher.finalize()
         };
 
-        // compute my scalar
+        // compute my pseudorandom scalar
         let scalar: P::Evaluation = {
             let mut hasher = H::new().chain_update(payload_commitment);
             let hasher_to_field = <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(
@@ -151,18 +162,14 @@ where
                 .ok_or_else(|| anyhow!("hash_to_field output is empty"))?
         };
 
-        // compute aggregate KZG commit and aggregate polynomial eval
-        // see "TODO rfold:" comment
+        // Compute aggregate polynomial [commitment|evaluation]
+        // as a pseudorandom linear combo of [commitments|evaluations]
+        // via evaluation of the polynomial whose coefficients are [commitments|evaluations]
+        // and whose input point is the pseudorandom scalar.
         let aggregate_commit = P::Commitment::from(
-            bcast
-                .iter()
-                .rfold(T::Group::zero(), |res, comm| *comm.as_ref() * scalar + res) // group ops in projective form
-                .into(), // final conversion to affine form
+            polynomial_eval(bcast.iter().map(|x| CurveMultiplier(x.as_ref())), scalar).into(),
         );
-        let aggregate_value = share
-            .evals
-            .iter()
-            .rfold(P::Evaluation::zero(), |res, val| scalar * val + res);
+        let aggregate_value = polynomial_eval(share.evals.iter().map(FieldMultiplier), scalar);
 
         // verify aggregate proof
         Ok(P::verify(
@@ -266,24 +273,19 @@ where
             .collect::<Result<_, anyhow::Error>>()?;
 
         // For each storage node j as per hotshot paper:
-        // - Compute pseudorandom storage_node_poly[j]: sum_i storage_node_scalars[j]^i * polys[i]
-        // - Compute aggregate proof for storage_node_poly[j](j)
+        // -  Compute aggregate polynomial
+        //    as a pseudorandom linear combo of payload polynomials
+        //    via evaluation of the polynomial whose coefficients are payload polynomials
+        //    and whose input point is the pseudorandom scalar.
+        // - Compute aggregate proof for the aggregate polynomial evaluated at j.
         Ok((
             storage_node_scalars
                 .iter()
                 .zip(storage_node_evals)
                 .enumerate()
                 .map(|(index, (scalar, evals))| {
-                    // Horner's method
                     let storage_node_poly =
-                        // see "TODO rfold:" comment
-                        polys.iter().rfold(P::Polynomial::zero(), |res, poly| {
-                            // `Polynomial` does not impl `Mul` by scalar
-                            // so we need to multiply each coeff by t
-                            res + P::Polynomial::from_coefficients_vec(
-                                poly.coeffs().iter().map(|coeff| *scalar * coeff).collect(),
-                            )
-                        });
+                        polynomial_eval(polys.iter().map(PolynomialMultiplier), scalar);
                     let (proof, _value) =
                         P::open(&self.ck, &storage_node_poly, &Self::index_to_point(index))?;
                     Ok(Share {
@@ -383,12 +385,65 @@ impl From<ark_serialize::SerializationError> for VidError {
     }
 }
 
-// TODO rfold: Use of `rfold` in this source file should be refactored into a
-// function that works on anything that can be multiplied by a field element.
-// Unfortunately, the concrete arkworks types involved in each of our uses of
-// `rfold` offer a different subset of the needed traits `Mul`, `Add`, etc.
-// Thus, any attempt to refactor would not improve code readability or
-// maintainability. :sad:
+/// Evaluate a generalized polynomial at a given point using Horner's method.
+///
+/// Coefficients can be anything that can be multiplied by a point
+/// and such that the result of such multiplications can be added.
+fn polynomial_eval<U, F, I>(coeffs: I, point: impl Borrow<F>) -> U
+where
+    I: IntoIterator,
+    I::Item: for<'a> Mul<&'a F, Output = U>,
+    U: Add<Output = U> + Zero,
+{
+    coeffs
+        .into_iter()
+        .fold(U::zero(), |res, coeff| coeff * point.borrow() + res)
+}
+
+struct FieldMultiplier<'a, F>(&'a F);
+
+/// Arkworks does not provide (&F,&F) multiplication
+impl<F> Mul<&F> for FieldMultiplier<'_, F>
+where
+    F: Field,
+{
+    type Output = F;
+
+    fn mul(self, rhs: &F) -> Self::Output {
+        *self.0 * rhs
+    }
+}
+
+/// Arkworks does not provide (&C,&F) multiplication
+struct CurveMultiplier<'a, C>(&'a C);
+
+impl<C, F> Mul<&F> for CurveMultiplier<'_, C>
+where
+    C: AffineRepr<ScalarField = F>,
+{
+    type Output = C::Group;
+
+    fn mul(self, rhs: &F) -> Self::Output {
+        *self.0 * rhs
+    }
+}
+
+/// Arkworks does not provide (&P,&F) multiplication
+struct PolynomialMultiplier<'a, P>(&'a P);
+
+impl<P, F> Mul<&F> for PolynomialMultiplier<'_, P>
+where
+    P: DenseUVPolynomial<F>,
+    F: Field,
+{
+    type Output = P;
+
+    fn mul(self, rhs: &F) -> Self::Output {
+        // `Polynomial` does not impl `Mul` by scalar
+        // so we need to multiply each coeff by `rhs`
+        P::from_coefficients_vec(self.0.coeffs().iter().map(|coeff| *coeff * rhs).collect())
+    }
+}
 
 #[cfg(test)]
 mod tests {
