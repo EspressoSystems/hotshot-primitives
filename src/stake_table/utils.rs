@@ -6,7 +6,12 @@ use super::{
     EncodedPublicKey,
 };
 use ark_ff::Field;
-use ark_std::{sync::Arc, vec, vec::Vec};
+use ark_std::{
+    rand::{CryptoRng, RngCore},
+    sync::Arc,
+    vec,
+    vec::Vec,
+};
 use ethereum_types::U256;
 use jf_primitives::crhf::CRHF;
 use jf_utils::canonical;
@@ -139,6 +144,10 @@ pub struct MerkleCommitment {
 }
 
 impl MerkleCommitment {
+    pub fn new(comm: FieldType, height: usize, size: usize) -> Self {
+        Self { comm, height, size }
+    }
+
     pub fn digest(&self) -> &FieldType {
         &self.comm
     }
@@ -336,7 +345,7 @@ impl PersistentMerkleNode {
             PersistentMerkleNode::Leaf { .. } => {
                 // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
                 let input = [
-                    FieldType::from(0u64),
+                    FieldType::from(0),
                     <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
                     u256_to_field(&value),
                 ];
@@ -472,12 +481,12 @@ impl PersistentMerkleNode {
 }
 
 /// Convert an index to a list of Merkle path branches
-pub fn to_merkle_path(idx: u64, height: usize) -> Vec<usize> {
+pub fn to_merkle_path(idx: usize, height: usize) -> Vec<usize> {
     let mut pos = idx;
     let mut ret: Vec<usize> = vec![];
     for _i in 0..height {
-        ret.push(usize::try_from(pos % (TREE_BRANCH as u64)).unwrap());
-        pos /= TREE_BRANCH as u64;
+        ret.push(pos % TREE_BRANCH);
+        pos /= TREE_BRANCH;
     }
     ret
 }
@@ -489,6 +498,19 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
             (pos + mul * branch, mul * TREE_BRANCH)
         })
         .0
+}
+
+/// Uniformly sample an element uniformly from 0 to m
+/// May be very inefficient and consuming a lot of randomness
+pub fn reject_sampling<R: CryptoRng + RngCore>(rng: &mut R, m: U256) -> U256 {
+    let mut bytes = vec![0u8; m.bits() / 8];
+    loop {
+        rng.fill_bytes(&mut bytes);
+        let ret = U256::from_big_endian(&bytes);
+        if ret < m {
+            break ret;
+        }
+    }
 }
 
 #[cfg(test)]
