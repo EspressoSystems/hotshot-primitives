@@ -460,7 +460,7 @@ mod tests {
     use sha2::Sha256;
 
     use super::*;
-    type PCS = UnivariateKzgPCS<Bls12_381>;
+    type Pcs = UnivariateKzgPCS<Bls12_381>;
     type G = <Bls12_381 as Pairing>::G1Affine;
     type H = Sha256;
 
@@ -470,7 +470,7 @@ mod tests {
         let byte_lens = [2, 16, 32, 47, 48, 49, 64, 100, 400];
 
         let mut rng = test_rng();
-        let srs = PCS::gen_srs_for_testing(
+        let srs = Pcs::gen_srs_for_testing(
             &mut test_rng(),
             vid_sizes.iter().max_by_key(|v| v.0).unwrap().0,
         )
@@ -478,12 +478,12 @@ mod tests {
 
         println!(
             "modulus byte len: {}",
-            (<<PCS as PolynomialCommitmentScheme>::Evaluation as Field>::BasePrimeField
+            (<<Pcs as PolynomialCommitmentScheme>::Evaluation as Field>::BasePrimeField
                 ::MODULUS_BIT_SIZE - 7)/8 + 1
         );
 
         for (payload_chunk_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
+            let vid = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
 
             for len in byte_lens {
                 println!(
@@ -530,14 +530,14 @@ mod tests {
         let byte_lens = [2, 32, 500];
 
         let mut rng = test_rng();
-        let srs = PCS::gen_srs_for_testing(
+        let srs = Pcs::gen_srs_for_testing(
             &mut test_rng(),
             vid_sizes.iter().max_by_key(|v| v.0).unwrap().0,
         )
         .unwrap();
 
         for (payload_chunk_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<PCS, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
+            let vid = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
 
             for len in byte_lens {
                 let mut random_bytes = vec![0u8; len];
