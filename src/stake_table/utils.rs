@@ -6,12 +6,7 @@ use super::{
     EncodedPublicKey,
 };
 use ark_ff::Field;
-use ark_std::{
-    rand::{CryptoRng, RngCore},
-    sync::Arc,
-    vec,
-    vec::Vec,
-};
+use ark_std::{sync::Arc, vec, vec::Vec};
 use ethereum_types::U256;
 use jf_primitives::crhf::CRHF;
 use jf_utils::canonical;
@@ -498,19 +493,6 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
             (pos + mul * branch, mul * TREE_BRANCH)
         })
         .0
-}
-
-/// Uniformly sample an element uniformly from 0 to m
-/// May be very inefficient and consuming a lot of randomness
-pub fn reject_sampling<R: CryptoRng + RngCore>(rng: &mut R, m: U256) -> U256 {
-    let mut bytes = vec![0u8; m.bits() / 8];
-    loop {
-        rng.fill_bytes(&mut bytes);
-        let ret = U256::from_big_endian(&bytes);
-        if ret < m {
-            break ret;
-        }
-    }
 }
 
 #[cfg(test)]

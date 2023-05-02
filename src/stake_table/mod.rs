@@ -1,5 +1,3 @@
-use crate::stake_table::utils::reject_sampling;
-
 use self::{
     error::StakeTableError,
     utils::{to_merkle_path, MerkleCommitment, MerkleProof, PersistentMerkleNode},
@@ -11,7 +9,7 @@ use ark_std::{
     sync::Arc,
     vec::Vec,
 };
-use ethereum_types::U256;
+use ethereum_types::{U256, U512};
 use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
@@ -134,9 +132,13 @@ impl StakeTable {
         root.num_keys()
     }
 
-    /// Samples a key weighted by its withholding stakes from the active stake table
+    /// Almost uniformly samples a key weighted by its withholding stakes from the active stake table
     pub fn sample_key_by_stake<R: CryptoRng + RngCore>(&self, rng: &mut R) -> &EncodedPublicKey {
-        let pos = reject_sampling(rng, self.active.total_stakes());
+        let mut bytes = [0u8; 64];
+        rng.fill_bytes(&mut bytes);
+        let r = U512::from_big_endian(&bytes);
+        let m = U512::from(self.active.total_stakes());
+        let pos: U256 = (r & m).try_into().unwrap();
         self.active.get_key_by_stake(pos).unwrap()
     }
 
