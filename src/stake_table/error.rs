@@ -10,6 +10,8 @@ pub enum StakeTableError {
     KeyNotFound,
     /// Key already exists
     ExistingKey,
-    /// Update that will result in a negative amount of stake
-    InsufficientFund,
+    /// Malformed Merkle proof
+    MalformedProof,
+    /// Verification Error
+    VerificationError,
 }

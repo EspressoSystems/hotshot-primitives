@@ -14,6 +14,7 @@ ark-ff = "0.4.0"
 ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
 displaydoc = { version = "0.2.3", default-features = false }
+ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
 jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
 jf-utils = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
