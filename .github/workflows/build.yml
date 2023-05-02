@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+    tags:
+      # YYYYMMDD
+      - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
+  pull_request:
+    branches:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        name: Checkout Repository
+
+      - uses: Swatinem/rust-cache@v2
+        name: Enable Rust Caching
+
+      - name: Format Check
+        run: cargo fmt -- --check
+
+      - uses: actions-rs/clippy-check@v1
+        name: Clippy
+        with:
+          token: ${{ github.token }}
+          args: --workspace --examples --bins --tests -- -D warnings
+
+      - name: Audit
+        run: cargo audit
+
+      - name: Build
+        run: |
+          cargo build --workspace --release
+
+      - name: Test
+        run: |
+          cargo test --workspace --no-run
+          cargo test --workspace --verbose -- -Zunstable-options --report-time
+        timeout-minutes: 30
+
+      - name: Generate Documentation
+        run: |
+          cargo doc --no-deps --lib --release
+          cp -R target/doc public
+          echo '<meta http-equiv="refresh" content="0; url=hotshot_primitives">' > public/index.html
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          cname: hotshot-primitives.docs.espressosys.com
