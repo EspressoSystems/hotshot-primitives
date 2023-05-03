@@ -59,7 +59,7 @@ pub struct MerkleProof {
 
 impl MerkleProof {
     pub fn tree_height(&self) -> usize {
-        self.path.len()
+        self.path.len() - 1
     }
 
     pub fn index(&self) -> &usize {
@@ -568,7 +568,7 @@ mod tests {
         }
         // Check that if the insertion is perform correctly
         for i in 0..10 {
-            assert!(roots[i].lookup(height, &path[i]).is_err());
+            assert!(roots[i].simple_lookup(height, &path[i]).is_err());
             assert_eq!(i, roots[i].num_keys());
             assert_eq!(
                 U256::from((i as u64 + 1) * 100),
@@ -590,17 +590,66 @@ mod tests {
                     .unwrap()
             );
         });
-        // test update
-        roots.push(
+
+        // test for `lookup` and Merkle proof
+        for i in 0..10 {
+            let proof = roots.last().unwrap().lookup(height, &path[i]).unwrap();
+            assert_eq!(height, proof.tree_height());
+            assert_eq!(&keys[i], proof.get_key().unwrap());
+            assert_eq!(&U256::from(100), proof.get_value().unwrap());
+            assert_eq!(
+                roots.last().unwrap().commitment(),
+                proof.compute_root().unwrap()
+            );
+        }
+
+        // test for `set_value`
+        // `set_value` with wrong key should fail
+        assert!(roots
+            .last()
+            .unwrap()
+            .set_value(height, &path[2], &keys[1], U256::from(100))
+            .is_err());
+        // A successful `set_value`
+        let (new_root, value) = roots
+            .last()
+            .unwrap()
+            .set_value(height, &path[2], &keys[2], U256::from(90))
+            .unwrap();
+        roots.push(new_root);
+        assert_eq!(U256::from(100), value);
+        assert_eq!(
+            U256::from(90),
             roots
                 .last()
                 .unwrap()
-                .set_value(height, &path[2], &keys[2], U256::from(90))
+                .simple_lookup(height, &path[2])
                 .unwrap()
-                .0,
         );
+
+        // test for `update`
+        // `update` with a wrong key should fail
+        assert!(roots
+            .last()
+            .unwrap()
+            .update(height, &path[3], &keys[0], U256::from(10), false)
+            .is_err());
+        // `update` that results in a negative stake should fail
+        assert!(roots
+            .last()
+            .unwrap()
+            .update(height, &path[3], &keys[3], U256::from(200), true)
+            .is_err());
+        // A successful `update`
+        let (new_root, value) = roots
+            .last()
+            .unwrap()
+            .update(height, &path[2], &keys[2], U256::from(10), false)
+            .unwrap();
+        roots.push(new_root);
+        assert_eq!(U256::from(100), value);
         assert_eq!(
-            U256::from(90),
+            value,
             roots
                 .last()
                 .unwrap()
