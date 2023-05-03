@@ -134,14 +134,14 @@ where
     fn verify_share(
         &self,
         share: &Self::StorageShare,
-        bcast: &Self::StorageCommon,
+        common: &Self::StorageCommon,
     ) -> VidResult<Result<(), ()>> {
-        assert_eq!(share.evals.len(), bcast.len());
+        assert_eq!(share.evals.len(), common.len());
 
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
             let mut hasher = H::new();
-            for comm in bcast.iter() {
+            for comm in common.iter() {
                 comm.serialize_uncompressed(&mut hasher)?;
             }
             hasher.finalize()
@@ -167,7 +167,7 @@ where
         // via evaluation of the polynomial whose coefficients are [commitments|evaluations]
         // and whose input point is the pseudorandom scalar.
         let aggregate_commit = P::Commitment::from(
-            polynomial_eval(bcast.iter().map(|x| CurveMultiplier(x.as_ref())), scalar).into(),
+            polynomial_eval(common.iter().map(|x| CurveMultiplier(x.as_ref())), scalar).into(),
         );
         let aggregate_value = polynomial_eval(share.evals.iter().map(FieldMultiplier), scalar);
 
@@ -186,10 +186,10 @@ where
     fn recover_payload(
         &self,
         shares: &[Self::StorageShare],
-        bcast: &Self::StorageCommon,
+        common: &Self::StorageCommon,
     ) -> VidResult<Vec<u8>> {
         Ok(bytes_from_field_elements(
-            self.recover_elems(shares, bcast)?,
+            self.recover_elems(shares, common)?,
         ))
     }
 }
@@ -213,7 +213,7 @@ where
         let num_polys = (payload.len() - 1) / self.payload_chunk_size + 1;
 
         // polys: partition payload into polynomial coefficients
-        // poly_commits: for result bcast
+        // poly_commits: for result `common`
         // storage_node_evals: evaluate polys at many points for erasure-coded result shares
         // payload_commit: same as in Vid::commit
         let (polys, poly_commits, storage_node_evals, payload_commit) = {
@@ -303,7 +303,7 @@ where
     pub fn recover_elems(
         &self,
         shares: &[<Self as VidScheme>::StorageShare],
-        _bcast: &<Self as VidScheme>::StorageCommon,
+        _common: &<Self as VidScheme>::StorageCommon,
     ) -> VidResult<Vec<P::Evaluation>> {
         if shares.len() < self.payload_chunk_size {
             return Err(VidError::Argument(format!(
@@ -494,11 +494,11 @@ mod tests {
                 let mut bytes_random = vec![0u8; len];
                 rng.fill_bytes(&mut bytes_random);
 
-                let (mut shares, bcast) = vid.dispersal_data(&bytes_random).unwrap();
+                let (mut shares, common) = vid.dispersal_data(&bytes_random).unwrap();
                 assert_eq!(shares.len(), num_storage_nodes);
 
                 for share in shares.iter() {
-                    vid.verify_share(share, &bcast).unwrap().unwrap();
+                    vid.verify_share(share, &common).unwrap().unwrap();
                 }
 
                 // sample a random subset of shares with size payload_chunk_size
@@ -506,19 +506,19 @@ mod tests {
 
                 // give minimum number of shares for recovery
                 let bytes_recovered = vid
-                    .recover_payload(&shares[..payload_chunk_size], &bcast)
+                    .recover_payload(&shares[..payload_chunk_size], &common)
                     .unwrap();
                 assert_eq!(bytes_recovered, bytes_random);
 
                 // give an intermediate number of shares for recovery
                 let intermediate_num_shares = (payload_chunk_size + num_storage_nodes) / 2;
                 let bytes_recovered = vid
-                    .recover_payload(&shares[..intermediate_num_shares], &bcast)
+                    .recover_payload(&shares[..intermediate_num_shares], &common)
                     .unwrap();
                 assert_eq!(bytes_recovered, bytes_random);
 
                 // give all shares for recovery
-                let bytes_recovered = vid.recover_payload(&shares, &bcast).unwrap();
+                let bytes_recovered = vid.recover_payload(&shares, &common).unwrap();
                 assert_eq!(bytes_recovered, bytes_random);
             }
         }

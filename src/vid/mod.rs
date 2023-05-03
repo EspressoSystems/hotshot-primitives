@@ -67,7 +67,7 @@ pub trait VidScheme {
     fn verify_share(
         &self,
         share: &Self::StorageShare,
-        bcast: &Self::StorageCommon,
+        common: &Self::StorageCommon,
     ) -> VidResult<Result<(), ()>>;
 
     /// Recover payload from shares.
@@ -75,6 +75,6 @@ pub trait VidScheme {
     fn recover_payload(
         &self,
         shares: &[Self::StorageShare],
-        bcast: &Self::StorageCommon,
+        common: &Self::StorageCommon,
     ) -> VidResult<Vec<u8>>;
 }
