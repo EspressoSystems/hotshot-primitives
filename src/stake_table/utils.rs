@@ -311,7 +311,7 @@ impl PersistentMerkleNode {
         path: &[usize],
         key: &EncodedPublicKey,
         value: U256,
-    ) -> Result<Self, StakeTableError> {
+    ) -> Result<Arc<Self>, StakeTableError> {
         match self {
             PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
             PersistentMerkleNode::Branch {
@@ -322,7 +322,7 @@ impl PersistentMerkleNode {
             } => {
                 let mut children = children.clone();
                 children[path[height - 1]] =
-                    Arc::new(children[path[height - 1]].update(height - 1, path, key, value)?);
+                    children[path[height - 1]].update(height - 1, path, key, value)?;
                 let num_keys = children.iter().map(|child| child.num_keys()).sum();
                 let total_stakes = children
                     .iter()
@@ -330,12 +330,12 @@ impl PersistentMerkleNode {
                     .fold(U256::zero(), |sum, val| sum + val);
                 let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
                     .map_err(|_| StakeTableError::RescueError)?[0];
-                Ok(PersistentMerkleNode::Branch {
+                Ok(Arc::new(PersistentMerkleNode::Branch {
                     comm,
                     children,
                     num_keys,
                     total_stakes,
-                })
+                }))
             }
             PersistentMerkleNode::Leaf { .. } => {
                 // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
@@ -344,11 +344,11 @@ impl PersistentMerkleNode {
                     <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
                     u256_to_field(&value),
                 ];
-                Ok(PersistentMerkleNode::Leaf {
+                Ok(Arc::new(PersistentMerkleNode::Leaf {
                     comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
                     key: key.clone(),
                     value,
-                })
+                }))
             }
         }
     }
@@ -359,7 +359,7 @@ impl PersistentMerkleNode {
         path: &[usize],
         key: &EncodedPublicKey,
         value: U256,
-    ) -> Result<Self, StakeTableError> {
+    ) -> Result<Arc<Self>, StakeTableError> {
         match self {
             PersistentMerkleNode::Empty => {
                 if height == 0 {
@@ -369,20 +369,16 @@ impl PersistentMerkleNode {
                         <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
                         u256_to_field(&value),
                     ];
-                    Ok(PersistentMerkleNode::Leaf {
+                    Ok(Arc::new(PersistentMerkleNode::Leaf {
                         comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
                         key: key.clone(),
                         value,
-                    })
+                    }))
                 } else {
                     let mut children =
                         [0; TREE_BRANCH].map(|_| Arc::new(PersistentMerkleNode::Empty));
-                    children[path[height - 1]] = Arc::new(children[path[height - 1]].register(
-                        height - 1,
-                        path,
-                        key,
-                        value,
-                    )?);
+                    children[path[height - 1]] =
+                        children[path[height - 1]].register(height - 1, path, key, value)?;
                     let num_keys = children.iter().map(|child| child.num_keys()).sum();
                     let total_stakes = children
                         .iter()
@@ -390,12 +386,12 @@ impl PersistentMerkleNode {
                         .fold(U256::zero(), |sum, val| sum + val);
                     let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
                         .map_err(|_| StakeTableError::RescueError)?[0];
-                    Ok(PersistentMerkleNode::Branch {
+                    Ok(Arc::new(PersistentMerkleNode::Branch {
                         comm,
                         children,
                         num_keys,
                         total_stakes,
-                    })
+                    }))
                 }
             }
             PersistentMerkleNode::Branch {
@@ -406,7 +402,7 @@ impl PersistentMerkleNode {
             } => {
                 let mut children = children.clone();
                 children[path[height - 1]] =
-                    Arc::new(children[path[height - 1]].register(height - 1, path, key, value)?);
+                    children[path[height - 1]].register(height - 1, path, key, value)?;
                 let num_keys = children.iter().map(|child| child.num_keys()).sum();
                 let total_stakes = children
                     .iter()
@@ -414,12 +410,12 @@ impl PersistentMerkleNode {
                     .fold(U256::zero(), |sum, val| sum + val);
                 let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
                     .map_err(|_| StakeTableError::RescueError)?[0];
-                Ok(PersistentMerkleNode::Branch {
+                Ok(Arc::new(PersistentMerkleNode::Branch {
                     comm,
                     children,
                     num_keys,
                     total_stakes,
-                })
+                }))
             }
             PersistentMerkleNode::Leaf { .. } => Err(StakeTableError::ExistingKey),
         }
@@ -430,7 +426,7 @@ impl PersistentMerkleNode {
         height: usize,
         path: &[usize],
         key: &EncodedPublicKey,
-    ) -> Result<Self, StakeTableError> {
+    ) -> Result<(Arc<Self>, U256), StakeTableError> {
         match self {
             PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
             PersistentMerkleNode::Branch {
@@ -440,11 +436,12 @@ impl PersistentMerkleNode {
                 total_stakes: _,
             } => {
                 let mut children = children.clone();
-                children[path[height - 1]] =
-                    Arc::new(children[path[height - 1]].remove(height - 1, path, key)?);
+                let value: U256;
+                (children[path[height - 1]], value) =
+                    children[path[height - 1]].remove(height - 1, path, key)?;
                 let num_keys = children.iter().map(|child| child.num_keys()).sum();
                 if num_keys == 0 {
-                    Ok(PersistentMerkleNode::Empty)
+                    Ok((Arc::new(PersistentMerkleNode::Empty), value))
                 } else {
                     let total_stakes = children
                         .iter()
@@ -452,21 +449,24 @@ impl PersistentMerkleNode {
                         .fold(U256::zero(), |sum, val| sum + val);
                     let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
                         .map_err(|_| StakeTableError::RescueError)?[0];
-                    Ok(PersistentMerkleNode::Branch {
-                        comm,
-                        children,
-                        num_keys,
-                        total_stakes,
-                    })
+                    Ok((
+                        Arc::new(PersistentMerkleNode::Branch {
+                            comm,
+                            children,
+                            num_keys,
+                            total_stakes,
+                        }),
+                        value,
+                    ))
                 }
             }
             PersistentMerkleNode::Leaf {
                 comm: _,
                 key: cur_key,
-                value: _,
+                value,
             } => {
                 if key == cur_key {
-                    Ok(PersistentMerkleNode::Empty)
+                    Ok((Arc::new(PersistentMerkleNode::Empty), *value))
                 } else {
                     Err(StakeTableError::MismatchedKey)
                 }
@@ -499,13 +499,13 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
 mod tests {
     use super::{to_merkle_path, PersistentMerkleNode};
     use crate::stake_table::EncodedPublicKey;
-    use ark_std::{vec, vec::Vec};
+    use ark_std::{sync::Arc, vec, vec::Vec};
     use ethereum_types::U256;
 
     #[test]
     fn test_persistent_merkle_tree() {
         let height = 3;
-        let mut roots = vec![PersistentMerkleNode::new_empty()];
+        let mut roots = vec![Arc::new(PersistentMerkleNode::new_empty())];
         let path = (0..10)
             .map(|idx| to_merkle_path(idx, height))
             .collect::<Vec<_>>();
@@ -569,7 +569,8 @@ mod tests {
                     .last()
                     .unwrap()
                     .remove(height, &path[i], &keys[i])
-                    .unwrap(),
+                    .unwrap()
+                    .0,
             );
             assert_eq!(10 - i - 1, roots.last().unwrap().num_keys());
         }

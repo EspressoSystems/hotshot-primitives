@@ -51,14 +51,13 @@ pub struct StakeTable {
 
     /// The mapping from public keys to their location in the Merkle tree.
     mapping: HashMap<EncodedPublicKey, usize>,
-    /// Number of keys in the mapping
-    mapping_num_keys: usize,
 }
 
 impl StakeTable {
     /// Update the stake table when the epoch number advances, should be manually called.
     pub fn advance(&mut self) {
         self.active = self.frozen.clone();
+        // ark_std::mem::replace(&mut self.active, self.frozen);
         self.frozen = self.pending.clone();
     }
 
@@ -132,46 +131,57 @@ impl StakeTable {
         root.num_keys()
     }
 
-    /// Almost uniformly samples a key weighted by its withholding stakes from the active stake table
+    /// Almost uniformly samples a key weighted by its stake from the active stake table
     pub fn sample_key_by_stake<R: CryptoRng + RngCore>(&self, rng: &mut R) -> &EncodedPublicKey {
         let mut bytes = [0u8; 64];
         rng.fill_bytes(&mut bytes);
         let r = U512::from_big_endian(&bytes);
         let m = U512::from(self.active.total_stakes());
-        let pos: U256 = (r & m).try_into().unwrap();
+        let pos: U256 = (r % m).try_into().unwrap();
         self.active.get_key_by_stake(pos).unwrap()
     }
 
-    /// Register a new key from the pendding stake table
+    /// Update the stake of a key from the pending stake table
+    pub fn update(&mut self, key: &EncodedPublicKey, value: U256) -> Result<(), StakeTableError> {
+        match self.mapping.get(key) {
+            Some(pos) => {
+                self.pending = self.pending.update(
+                    self.height,
+                    &to_merkle_path(*pos, self.height),
+                    key,
+                    value,
+                )?;
+                Ok(())
+            }
+            None => Err(StakeTableError::KeyNotFound),
+        }
+    }
+
+    /// Register a new key from the pending stake table
     pub fn register(&mut self, key: &EncodedPublicKey, value: U256) -> Result<(), StakeTableError> {
         let pos = match self.mapping.get(key) {
             Some(pos) => *pos,
             None => {
-                let pos = self.mapping_num_keys;
-                self.mapping_num_keys += 1;
+                let pos = self.mapping.len();
                 self.mapping.insert(key.clone(), pos);
                 pos
             }
         };
-        self.pending = Arc::new(self.pending.register(
-            self.height,
-            &to_merkle_path(pos, self.height),
-            key,
-            value,
-        )?);
+        self.pending =
+            self.pending
+                .register(self.height, &to_merkle_path(pos, self.height), key, value)?;
         Ok(())
     }
 
     /// Deregister a key from the pending stake table
-    pub fn deregister(&mut self, key: &EncodedPublicKey) -> Result<(), StakeTableError> {
+    pub fn deregister(&mut self, key: &EncodedPublicKey) -> Result<U256, StakeTableError> {
         match self.mapping.get(key) {
             Some(pos) => {
-                self.pending = Arc::new(self.pending.remove(
-                    self.height,
-                    &to_merkle_path(*pos, self.height),
-                    key,
-                )?);
-                Ok(())
+                let value: U256;
+                (self.pending, value) =
+                    self.pending
+                        .remove(self.height, &to_merkle_path(*pos, self.height), key)?;
+                Ok(value)
             }
             None => Err(StakeTableError::KeyNotFound),
         }
