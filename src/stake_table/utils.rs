@@ -420,59 +420,6 @@ impl PersistentMerkleNode {
             PersistentMerkleNode::Leaf { .. } => Err(StakeTableError::ExistingKey),
         }
     }
-
-    pub fn remove(
-        &self,
-        height: usize,
-        path: &[usize],
-        key: &EncodedPublicKey,
-    ) -> Result<(Arc<Self>, U256), StakeTableError> {
-        match self {
-            PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
-            PersistentMerkleNode::Branch {
-                comm: _,
-                children,
-                num_keys: _,
-                total_stakes: _,
-            } => {
-                let mut children = children.clone();
-                let value: U256;
-                (children[path[height - 1]], value) =
-                    children[path[height - 1]].remove(height - 1, path, key)?;
-                let num_keys = children.iter().map(|child| child.num_keys()).sum();
-                if num_keys == 0 {
-                    Ok((Arc::new(PersistentMerkleNode::Empty), value))
-                } else {
-                    let total_stakes = children
-                        .iter()
-                        .map(|child| child.total_stakes())
-                        .fold(U256::zero(), |sum, val| sum + val);
-                    let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
-                        .map_err(|_| StakeTableError::RescueError)?[0];
-                    Ok((
-                        Arc::new(PersistentMerkleNode::Branch {
-                            comm,
-                            children,
-                            num_keys,
-                            total_stakes,
-                        }),
-                        value,
-                    ))
-                }
-            }
-            PersistentMerkleNode::Leaf {
-                comm: _,
-                key: cur_key,
-                value,
-            } => {
-                if key == cur_key {
-                    Ok((Arc::new(PersistentMerkleNode::Empty), *value))
-                } else {
-                    Err(StakeTableError::MismatchedKey)
-                }
-            }
-        }
-    }
 }
 
 /// Convert an index to a list of Merkle path branches
@@ -562,17 +509,5 @@ mod tests {
                 .simple_lookup(height, &path[2])
                 .unwrap()
         );
-        // test remove
-        for i in 0..10 {
-            roots.push(
-                roots
-                    .last()
-                    .unwrap()
-                    .remove(height, &path[i], &keys[i])
-                    .unwrap()
-                    .0,
-            );
-            assert_eq!(10 - i - 1, roots.last().unwrap().num_keys());
-        }
     }
 }

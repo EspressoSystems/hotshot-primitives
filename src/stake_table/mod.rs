@@ -159,31 +159,19 @@ impl StakeTable {
 
     /// Register a new key from the pending stake table
     pub fn register(&mut self, key: &EncodedPublicKey, value: U256) -> Result<(), StakeTableError> {
-        let pos = match self.mapping.get(key) {
-            Some(pos) => *pos,
+        match self.mapping.get(key) {
+            Some(_) => Err(StakeTableError::ExistingKey),
             None => {
                 let pos = self.mapping.len();
                 self.mapping.insert(key.clone(), pos);
-                pos
+                self.pending = self.pending.register(
+                    self.height,
+                    &to_merkle_path(pos, self.height),
+                    key,
+                    value,
+                )?;
+                Ok(())
             }
-        };
-        self.pending =
-            self.pending
-                .register(self.height, &to_merkle_path(pos, self.height), key, value)?;
-        Ok(())
-    }
-
-    /// Deregister a key from the pending stake table
-    pub fn deregister(&mut self, key: &EncodedPublicKey) -> Result<U256, StakeTableError> {
-        match self.mapping.get(key) {
-            Some(pos) => {
-                let value: U256;
-                (self.pending, value) =
-                    self.pending
-                        .remove(self.height, &to_merkle_path(*pos, self.height), key)?;
-                Ok(value)
-            }
-            None => Err(StakeTableError::KeyNotFound),
         }
     }
 }
