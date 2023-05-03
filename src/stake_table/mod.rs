@@ -20,6 +20,7 @@ pub mod utils;
 
 /// Copied from HotShot repo.
 /// Type saftey wrapper for byte encoded keys.
+/// Assume that the content is a canonically serialized public key
 #[tagged("PUBKEY")]
 #[derive(
     Clone, Debug, Hash, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq, PartialOrd, Ord,
@@ -57,7 +58,6 @@ impl StakeTable {
     /// Update the stake table when the epoch number advances, should be manually called.
     pub fn advance(&mut self) {
         self.active = self.frozen.clone();
-        // ark_std::mem::replace(&mut self.active, self.frozen);
         self.frozen = self.pending.clone();
     }
 

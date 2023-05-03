@@ -5,7 +5,7 @@ use super::{
     error::StakeTableError,
     EncodedPublicKey,
 };
-use ark_ff::Field;
+use ark_serialize::CanonicalDeserialize;
 use ark_std::{sync::Arc, vec, vec::Vec};
 use ethereum_types::U256;
 use jf_primitives::crhf::CRHF;
@@ -92,7 +92,8 @@ impl MerkleProof {
             Some(MerklePathEntry::Leaf { key, value }) => {
                 let input = [
                     FieldType::from(0),
-                    <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
+                    <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
+                        .unwrap(),
                     u256_to_field(value),
                 ];
                 let init = Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0];
@@ -311,64 +312,49 @@ impl PersistentMerkleNode {
         key: &EncodedPublicKey,
         value: U256,
     ) -> Result<Arc<Self>, StakeTableError> {
-        match self {
-            PersistentMerkleNode::Empty => {
-                if height == 0 {
-                    // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
-                    let input = [
-                        FieldType::from(0u64),
-                        <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
-                        u256_to_field(&value),
-                    ];
-                    Ok(Arc::new(PersistentMerkleNode::Leaf {
-                        comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
-                        key: key.clone(),
-                        value,
-                    }))
-                } else {
-                    let mut children =
-                        [0; TREE_BRANCH].map(|_| Arc::new(PersistentMerkleNode::Empty));
-                    children[path[height - 1]] =
-                        children[path[height - 1]].register(height - 1, path, key, value)?;
-                    let num_keys = children.iter().map(|child| child.num_keys()).sum();
-                    let total_stakes = children
-                        .iter()
-                        .map(|child| child.total_stakes())
-                        .fold(U256::zero(), |sum, val| sum + val);
-                    let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
-                        .map_err(|_| StakeTableError::RescueError)?[0];
-                    Ok(Arc::new(PersistentMerkleNode::Branch {
-                        comm,
-                        children,
-                        num_keys,
-                        total_stakes,
-                    }))
-                }
+        if height == 0 {
+            if matches!(self, PersistentMerkleNode::Empty) {
+                let input = [
+                    FieldType::from(0u64),
+                    <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
+                        .unwrap(),
+                    u256_to_field(&value),
+                ];
+                Ok(Arc::new(PersistentMerkleNode::Leaf {
+                    comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
+                    key: key.clone(),
+                    value,
+                }))
+            } else {
+                Err(StakeTableError::ExistingKey)
             }
-            PersistentMerkleNode::Branch {
+        } else {
+            let mut children = if let &PersistentMerkleNode::Branch {
                 comm: _,
                 children,
                 num_keys: _,
                 total_stakes: _,
-            } => {
-                let mut children = children.clone();
-                children[path[height - 1]] =
-                    children[path[height - 1]].register(height - 1, path, key, value)?;
-                let num_keys = children.iter().map(|child| child.num_keys()).sum();
-                let total_stakes = children
-                    .iter()
-                    .map(|child| child.total_stakes())
-                    .fold(U256::zero(), |sum, val| sum + val);
-                let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
-                    .map_err(|_| StakeTableError::RescueError)?[0];
-                Ok(Arc::new(PersistentMerkleNode::Branch {
-                    comm,
-                    children,
-                    num_keys,
-                    total_stakes,
-                }))
-            }
-            PersistentMerkleNode::Leaf { .. } => Err(StakeTableError::ExistingKey),
+            } = &self
+            {
+                children.clone()
+            } else {
+                [0; TREE_BRANCH].map(|_| Arc::new(PersistentMerkleNode::Empty))
+            };
+            children[path[height - 1]] =
+                children[path[height - 1]].register(height - 1, path, key, value)?;
+            let num_keys = children.iter().map(|child| child.num_keys()).sum();
+            let total_stakes = children
+                .iter()
+                .map(|child| child.total_stakes())
+                .fold(U256::zero(), |sum, val| sum + val);
+            let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
+                .map_err(|_| StakeTableError::RescueError)?[0];
+            Ok(Arc::new(PersistentMerkleNode::Branch {
+                comm,
+                children,
+                num_keys,
+                total_stakes,
+            }))
         }
     }
 
@@ -426,10 +412,10 @@ impl PersistentMerkleNode {
                             .checked_add(delta)
                             .ok_or(StakeTableError::StakeOverflow)
                     }?;
-                    // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
                     let input = [
                         FieldType::from(0),
-                        <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
+                        <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
+                            .unwrap(),
                         u256_to_field(&value),
                     ];
                     Ok((
@@ -496,10 +482,10 @@ impl PersistentMerkleNode {
                 value: old_value,
             } => {
                 if key == cur_key {
-                    // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
                     let input = [
                         FieldType::from(0),
-                        <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
+                        <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
+                            .unwrap(),
                         u256_to_field(&value),
                     ];
                     Ok((
@@ -542,9 +528,10 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{to_merkle_path, PersistentMerkleNode};
-    use crate::stake_table::EncodedPublicKey;
+    use crate::stake_table::{config::FieldType, EncodedPublicKey};
     use ark_std::{sync::Arc, vec, vec::Vec};
     use ethereum_types::U256;
+    use jf_utils::to_bytes;
 
     #[test]
     fn test_persistent_merkle_tree() {
@@ -553,8 +540,8 @@ mod tests {
         let path = (0..10)
             .map(|idx| to_merkle_path(idx, height))
             .collect::<Vec<_>>();
-        let keys = (0u8..10u8)
-            .map(|i| EncodedPublicKey(vec![i]))
+        let keys = (0..10)
+            .map(|i| EncodedPublicKey(to_bytes!(&FieldType::from(i)).unwrap()))
             .collect::<Vec<_>>();
         // Insert key (0..10) with associated value 100 to the persistent merkle tree
         for (i, key) in keys.iter().enumerate() {
@@ -626,6 +613,7 @@ mod tests {
                 .simple_lookup(height, &path[2])
                 .unwrap()
         );
+        assert_eq!(U256::from(990), roots.last().unwrap().total_stakes());
 
         // test for `update`
         // `update` with a wrong key should fail
@@ -656,5 +644,6 @@ mod tests {
                 .simple_lookup(height, &path[2])
                 .unwrap()
         );
+        assert_eq!(U256::from(1000), roots.last().unwrap().total_stakes());
     }
 }
