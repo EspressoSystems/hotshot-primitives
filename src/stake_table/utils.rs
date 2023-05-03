@@ -303,56 +303,7 @@ impl PersistentMerkleNode {
         }
     }
 
-    /// Persistent update of a merkle tree
-    /// Instead of direct modify the tree content, it will create a new copy for the affected Merkle path and modify upon it.
-    pub fn update(
-        &self,
-        height: usize,
-        path: &[usize],
-        key: &EncodedPublicKey,
-        value: U256,
-    ) -> Result<Arc<Self>, StakeTableError> {
-        match self {
-            PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
-            PersistentMerkleNode::Branch {
-                comm: _,
-                children,
-                num_keys: _,
-                total_stakes: _,
-            } => {
-                let mut children = children.clone();
-                children[path[height - 1]] =
-                    children[path[height - 1]].update(height - 1, path, key, value)?;
-                let num_keys = children.iter().map(|child| child.num_keys()).sum();
-                let total_stakes = children
-                    .iter()
-                    .map(|child| child.total_stakes())
-                    .fold(U256::zero(), |sum, val| sum + val);
-                let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
-                    .map_err(|_| StakeTableError::RescueError)?[0];
-                Ok(Arc::new(PersistentMerkleNode::Branch {
-                    comm,
-                    children,
-                    num_keys,
-                    total_stakes,
-                }))
-            }
-            PersistentMerkleNode::Leaf { .. } => {
-                // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
-                let input = [
-                    FieldType::from(0),
-                    <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
-                    u256_to_field(&value),
-                ];
-                Ok(Arc::new(PersistentMerkleNode::Leaf {
-                    comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
-                    key: key.clone(),
-                    value,
-                }))
-            }
-        }
-    }
-
+    /// Insert a new `key` into the Merkle tree
     pub fn register(
         &self,
         height: usize,
@@ -418,6 +369,152 @@ impl PersistentMerkleNode {
                 }))
             }
             PersistentMerkleNode::Leaf { .. } => Err(StakeTableError::ExistingKey),
+        }
+    }
+
+    /// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
+    /// Return the updated stake
+    pub fn update(
+        &self,
+        height: usize,
+        path: &[usize],
+        key: &EncodedPublicKey,
+        delta: U256,
+        negative: bool,
+    ) -> Result<(Arc<Self>, U256), StakeTableError> {
+        match self {
+            PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
+            PersistentMerkleNode::Branch {
+                comm: _,
+                children,
+                num_keys: _,
+                total_stakes: _,
+            } => {
+                let mut children = children.clone();
+                let value: U256;
+                (children[path[height - 1]], value) =
+                    children[path[height - 1]].update(height - 1, path, key, delta, negative)?;
+                let num_keys = children.iter().map(|child| child.num_keys()).sum();
+                let total_stakes = children
+                    .iter()
+                    .map(|child| child.total_stakes())
+                    .fold(U256::zero(), |sum, val| sum + val);
+                let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
+                    .map_err(|_| StakeTableError::RescueError)?[0];
+                Ok((
+                    Arc::new(PersistentMerkleNode::Branch {
+                        comm,
+                        children,
+                        num_keys,
+                        total_stakes,
+                    }),
+                    value,
+                ))
+            }
+            PersistentMerkleNode::Leaf {
+                comm: _,
+                key: node_key,
+                value: old_value,
+            } => {
+                if key == node_key {
+                    let value = if negative {
+                        old_value
+                            .checked_sub(delta)
+                            .ok_or(StakeTableError::InsufficientFund)
+                    } else {
+                        old_value
+                            .checked_add(delta)
+                            .ok_or(StakeTableError::StakeOverflow)
+                    }?;
+                    // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
+                    let input = [
+                        FieldType::from(0),
+                        <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
+                        u256_to_field(&value),
+                    ];
+                    Ok((
+                        Arc::new(PersistentMerkleNode::Leaf {
+                            comm: Digest::evaluate(input)
+                                .map_err(|_| StakeTableError::RescueError)?[0],
+                            key: key.clone(),
+                            value,
+                        }),
+                        value,
+                    ))
+                } else {
+                    Err(StakeTableError::MismatchedKey)
+                }
+            }
+        }
+    }
+
+    /// Set the stake of `key` to be `value`.
+    /// Return the previous stake
+    pub fn set_value(
+        &self,
+        height: usize,
+        path: &[usize],
+        key: &EncodedPublicKey,
+        value: U256,
+    ) -> Result<(Arc<Self>, U256), StakeTableError> {
+        match self {
+            PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
+            PersistentMerkleNode::Branch {
+                comm: _,
+                children,
+                num_keys: _,
+                total_stakes: _,
+            } => {
+                let mut children = children.clone();
+                let old_value: U256;
+                (children[path[height - 1]], old_value) =
+                    children[path[height - 1]].set_value(height - 1, path, key, value)?;
+                let num_keys = children.iter().map(|child| child.num_keys()).sum();
+                if num_keys == 0 {
+                    Ok((Arc::new(PersistentMerkleNode::Empty), value))
+                } else {
+                    let total_stakes = children
+                        .iter()
+                        .map(|child| child.total_stakes())
+                        .fold(U256::zero(), |sum, val| sum + val);
+                    let comm = Digest::evaluate(children.clone().map(|child| child.commitment()))
+                        .map_err(|_| StakeTableError::RescueError)?[0];
+                    Ok((
+                        Arc::new(PersistentMerkleNode::Branch {
+                            comm,
+                            children,
+                            num_keys,
+                            total_stakes,
+                        }),
+                        old_value,
+                    ))
+                }
+            }
+            PersistentMerkleNode::Leaf {
+                comm: _,
+                key: cur_key,
+                value: old_value,
+            } => {
+                if key == cur_key {
+                    // WARNING(Chengyu): I try to directly (de)serialize the encoded public key as a field element here. May introduce error or unwanted behavior.
+                    let input = [
+                        FieldType::from(0),
+                        <FieldType as Field>::from_random_bytes(&key.0).unwrap(),
+                        u256_to_field(&value),
+                    ];
+                    Ok((
+                        Arc::new(PersistentMerkleNode::Leaf {
+                            comm: Digest::evaluate(input)
+                                .map_err(|_| StakeTableError::RescueError)?[0],
+                            key: key.clone(),
+                            value,
+                        }),
+                        *old_value,
+                    ))
+                } else {
+                    Err(StakeTableError::MismatchedKey)
+                }
+            }
         }
     }
 }
@@ -498,8 +595,9 @@ mod tests {
             roots
                 .last()
                 .unwrap()
-                .update(height, &path[2], &keys[2], U256::from(90))
-                .unwrap(),
+                .set_value(height, &path[2], &keys[2], U256::from(90))
+                .unwrap()
+                .0,
         );
         assert_eq!(
             U256::from(90),

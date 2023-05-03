@@ -141,17 +141,47 @@ impl StakeTable {
         self.active.get_key_by_stake(pos).unwrap()
     }
 
-    /// Update the stake of a key from the pending stake table
-    pub fn update(&mut self, key: &EncodedPublicKey, value: U256) -> Result<(), StakeTableError> {
+    /// Set the stake withheld by `key` to be `value`.
+    /// Return the previous stake if succeed.
+    pub fn set_value(
+        &mut self,
+        key: &EncodedPublicKey,
+        value: U256,
+    ) -> Result<U256, StakeTableError> {
         match self.mapping.get(key) {
             Some(pos) => {
-                self.pending = self.pending.update(
+                let old_value: U256;
+                (self.pending, old_value) = self.pending.set_value(
                     self.height,
                     &to_merkle_path(*pos, self.height),
                     key,
                     value,
                 )?;
-                Ok(())
+                Ok(old_value)
+            }
+            None => Err(StakeTableError::KeyNotFound),
+        }
+    }
+
+    /// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
+    /// Return the updated stake
+    pub fn update(
+        &mut self,
+        key: &EncodedPublicKey,
+        delta: U256,
+        negative: bool,
+    ) -> Result<U256, StakeTableError> {
+        match self.mapping.get(key) {
+            Some(pos) => {
+                let value: U256;
+                (self.pending, value) = self.pending.update(
+                    self.height,
+                    &to_merkle_path(*pos, self.height),
+                    key,
+                    delta,
+                    negative,
+                )?;
+                Ok(value)
             }
             None => Err(StakeTableError::KeyNotFound),
         }

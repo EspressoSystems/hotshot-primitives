@@ -14,4 +14,8 @@ pub enum StakeTableError {
     MalformedProof,
     /// Verification Error
     VerificationError,
+    /// Insufficient fund: the number of stake cannot be negative
+    InsufficientFund,
+    /// The number of stake exceed U256
+    StakeOverflow,
 }
