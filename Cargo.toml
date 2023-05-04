@@ -9,9 +9,17 @@ homepage = "https://github.com/EspressoSystems/hotshot-primitives"
 repository = "https://github.com/EspressoSystems/hotshot-primitives"
 
 [dependencies]
+ark-bn254 = "0.4.0"
+ark-ff = "0.4.0"
+ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.2.0" }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
+displaydoc = { version = "0.2.3", default-features = false }
+ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
+jf-primitives = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
+jf-utils = { git = "https://github.com/espressosystems/jellyfish", tag = "0.3.0" }
+serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
+sha3 = "0.10.7"
+tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
 
 [features]
 default = ["parallel"]
