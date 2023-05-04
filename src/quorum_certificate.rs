@@ -1,6 +1,11 @@
 use core::marker::PhantomData;
 
-use ark_std::{format, vec, vec::Vec, rand::{CryptoRng, RngCore}};
+use ark_std::{
+    format,
+    rand::{CryptoRng, RngCore},
+    vec,
+    vec::Vec,
+};
 use ethereum_types::U256;
 use jf_primitives::errors::PrimitivesError;
 use jf_primitives::errors::PrimitivesError::ParameterError;
