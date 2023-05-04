@@ -22,13 +22,12 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     type Proof;
 
     /// Produces a partial signature on a message with a single user signing key
-    /// * `agg_sig_pp` -  public parameters of the aggregated signature scheme
+    /// * `qc_pp` - public parameters for validating the QC
     /// * `message` - message to be signed
     /// * `signing_keys` - user signing key
     /// * `returns` - a "simple" signature
     fn partial_sign<R: CryptoRng + RngCore>(
         qc_pp: &Self::QCpp,
-        agg_sig_pp: &A::PublicParameter,
         message: &[A::MessageUnit],
         sig_key: &A::SigningKey,
         prng: &mut R,
@@ -36,7 +35,6 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
 
     /// Computes an aggregated signature from a set of partial signatures and the verification keys involved
     /// * `qc_pp` - public parameters for validating the QC
-    /// * `agg_sign_pp` - public parameter for the aggregated signature scheme
     /// * `active_keys` - a bool vector indicating the list of verification keys corresponding to the set of partial signatures
     /// * `partial_sigs` - partial signatures on the same message
     /// * `returns` - an error if some of the partial signatures provided are invalid
@@ -44,21 +42,18 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     ///     Otherwise return an aggregated signature with a proof.
     fn assemble(
         qc_pp: &Self::QCpp,
-        agg_sig_pp: &A::PublicParameter,
         active_keys: &[bool],
         partial_sigs: &[A::Signature],
     ) -> Result<(A::Signature, Self::Proof), PrimitivesError>;
 
     /// Checks an aggregated signature over some message provided as input
     /// * `qc_pp` - public parameters for validating the QC
-    /// * `agg_sig_pp` -  public parameters of the aggregated signature scheme
     /// * `message` - message to check the aggregated signature against
     /// * `sig` - aggregated signature on message
     /// * `proof` - auxiliary information to check the signature
     /// * `returns` - nothing if the signature is valid, an error otherwise.
     fn check(
         qc_pp: &Self::QCpp,
-        agg_sig_pp: &A::PublicParameter,
         message: &[A::MessageUnit],
         sig: &A::Signature,
         proof: &Self::Proof,
@@ -76,9 +71,10 @@ pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit
 
 // TODO: refactor
 pub struct QCParams<A: AggregateableSignatureSchemes> {
-    stake_table_digest: StakeTableDigest<A>,
-    stake_entries: Vec<StakeTableEntry<A>>,
-    threshold: U256,
+    pub stake_table_digest: StakeTableDigest<A>,
+    pub stake_entries: Vec<StakeTableEntry<A>>,
+    pub threshold: U256,
+    pub agg_sig_pp: A::PublicParameter,
 }
 
 impl<A> QuorumCertificateValidation<A> for BitvectorQuorumCertificate<A>
@@ -91,18 +87,16 @@ where
 
     fn partial_sign<R: CryptoRng + RngCore>(
         qc_pp: &Self::QCpp,
-        agg_sig_pp: &A::PublicParameter,
         message: &[A::MessageUnit],
         sig_key: &A::SigningKey,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError> {
         let msg = [&qc_pp.stake_table_digest.0, message].concat();
-        A::sign(agg_sig_pp, sig_key, &msg[..], prng)
+        A::sign(&qc_pp.agg_sig_pp, sig_key, &msg[..], prng)
     }
 
     fn assemble(
         qc_pp: &Self::QCpp,
-        agg_sig_pp: &A::PublicParameter,
         active_keys: &[bool],
         partial_sigs: &[A::Signature],
     ) -> Result<(A::Signature, Self::Proof), PrimitivesError> {
@@ -135,14 +129,13 @@ where
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        let sig = A::aggregate(agg_sig_pp, &ver_keys[..], partial_sigs)?;
+        let sig = A::aggregate(&qc_pp.agg_sig_pp, &ver_keys[..], partial_sigs)?;
 
         Ok((sig, active_keys.to_vec()))
     }
 
     fn check(
         qc_pp: &Self::QCpp,
-        agg_sig_pp: &A::PublicParameter,
         message: &[A::MessageUnit],
         sig: &A::Signature,
         proof: &Self::Proof,
@@ -182,6 +175,6 @@ where
             }
         }
         let msg = [&qc_pp.stake_table_digest.0, message].concat();
-        A::multi_sig_verify(agg_sig_pp, &ver_keys[..], &msg[..], sig)
+        A::multi_sig_verify(&qc_pp.agg_sig_pp, &ver_keys[..], &msg[..], sig)
     }
 }
