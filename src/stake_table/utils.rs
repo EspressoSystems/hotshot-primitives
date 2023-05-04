@@ -5,16 +5,17 @@ use super::{
     error::StakeTableError,
     EncodedPublicKey,
 };
-use ark_serialize::CanonicalDeserialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{sync::Arc, vec, vec::Vec};
 use ethereum_types::U256;
 use jf_primitives::crhf::CRHF;
 use jf_utils::canonical;
 use serde::{Deserialize, Serialize};
+use tagged_base64::tagged;
 
 /// A persistent merkle tree tailored for the stake table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum PersistentMerkleNode {
+pub(crate) enum PersistentMerkleNode {
     Empty,
     Branch {
         #[serde(with = "canonical")]
@@ -129,6 +130,8 @@ impl MerkleProof {
     }
 }
 
+#[tagged("MERKLE_COMM")]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 /// A succint commitment for Merkle tree
 pub struct MerkleCommitment {
     /// Merkle tree digest
@@ -158,11 +161,6 @@ impl MerkleCommitment {
 }
 
 impl PersistentMerkleNode {
-    /// Construct an empty merkle node
-    pub fn new_empty() -> Self {
-        Self::Empty
-    }
-
     /// Returns the succint commitment of this subtree
     pub fn commitment(&self) -> FieldType {
         match self {
@@ -509,7 +507,7 @@ impl PersistentMerkleNode {
 pub fn to_merkle_path(idx: usize, height: usize) -> Vec<usize> {
     let mut pos = idx;
     let mut ret: Vec<usize> = vec![];
-    for _i in 0..height {
+    for _ in 0..height {
         ret.push(pos % TREE_BRANCH);
         pos /= TREE_BRANCH;
     }
@@ -536,7 +534,7 @@ mod tests {
     #[test]
     fn test_persistent_merkle_tree() {
         let height = 3;
-        let mut roots = vec![Arc::new(PersistentMerkleNode::new_empty())];
+        let mut roots = vec![Arc::new(PersistentMerkleNode::Empty)];
         let path = (0..10)
             .map(|idx| to_merkle_path(idx, height))
             .collect::<Vec<_>>();
