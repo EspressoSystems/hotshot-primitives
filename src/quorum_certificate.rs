@@ -1,3 +1,4 @@
+use bitvec::prelude::*;
 use core::marker::PhantomData;
 
 use ark_std::{
@@ -46,7 +47,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     ///     Otherwise return an aggregated signature with a proof.
     fn assemble(
         qc_pp: &Self::QCProverParams,
-        active_keys: &[bool],
+        active_keys: &BitSlice,
         partial_sigs: &[A::Signature],
     ) -> Result<(A::Signature, Self::Proof), PrimitivesError>;
 
@@ -90,7 +91,7 @@ where
     // TODO: later with SNARKs we'll use a smaller verifier parameter
     type QCVerifierParams = QCParams<A>;
 
-    type Proof = Vec<bool>;
+    type Proof = BitVec;
 
     fn partial_sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
@@ -103,7 +104,7 @@ where
 
     fn assemble(
         qc_pp: &Self::QCProverParams,
-        active_keys: &[bool],
+        active_keys: &BitSlice,
         partial_sigs: &[A::Signature],
     ) -> Result<(A::Signature, Self::Proof), PrimitivesError> {
         if active_keys.len() != qc_pp.stake_entries.len() {
@@ -115,8 +116,8 @@ where
         }
         let total_weight: U256 = qc_pp.stake_entries.iter().zip(active_keys.iter()).fold(
             U256::zero(),
-            |acc, (entry, &b)| {
-                if b {
+            |acc, (entry, b)| {
+                if *b {
                     acc + entry.stake_amount
                 } else {
                     acc
@@ -130,14 +131,14 @@ where
             )));
         }
         let mut ver_keys = vec![];
-        for (entry, &b) in qc_pp.stake_entries.iter().zip(active_keys.iter()) {
-            if b {
+        for (entry, b) in qc_pp.stake_entries.iter().zip(active_keys.iter()) {
+            if *b {
                 ver_keys.push(entry.stake_key.clone());
             }
         }
         let sig = A::aggregate(&qc_pp.agg_sig_pp, &ver_keys[..], partial_sigs)?;
 
-        Ok((sig, active_keys.to_vec()))
+        Ok((sig, active_keys.into()))
     }
 
     fn check(
@@ -158,16 +159,13 @@ where
                 .stake_entries
                 .iter()
                 .zip(proof.iter())
-                .fold(
-                    U256::zero(),
-                    |acc, (entry, &b)| {
-                        if b {
-                            acc + entry.stake_amount
-                        } else {
-                            acc
-                        }
-                    },
-                );
+                .fold(U256::zero(), |acc, (entry, b)| {
+                    if *b {
+                        acc + entry.stake_amount
+                    } else {
+                        acc
+                    }
+                });
         if total_weight < qc_vp.threshold {
             return Err(ParameterError(format!(
                 "total_weight {} less than threshold {}",
@@ -175,8 +173,8 @@ where
             )));
         }
         let mut ver_keys = vec![];
-        for (entry, &b) in qc_vp.stake_entries.iter().zip(proof.iter()) {
-            if b {
+        for (entry, b) in qc_vp.stake_entries.iter().zip(proof.iter()) {
+            if *b {
                 ver_keys.push(entry.stake_key.clone());
             }
         }
