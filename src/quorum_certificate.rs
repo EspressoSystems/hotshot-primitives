@@ -270,7 +270,7 @@ mod tests {
             assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
                 &qc_pp,
                 active_bad.as_bitslice(),
-                &[sig1, sig2.clone()]
+                &[sig1.clone(), sig2.clone()]
             )
             .is_err());
             // wrong bool vector length
@@ -304,6 +304,12 @@ mod tests {
                 &qc1.1
             )
             .is_err());
+
+            let bad_sig = &sig1;
+            assert!(
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg, &bad_sig, &qc1.1)
+                    .is_err()
+            );
         };
     }
     #[test]
