@@ -10,11 +10,12 @@ repository = "https://github.com/EspressoSystems/hotshot-primitives"
 
 [dependencies]
 ark-std = { version = "0.4.0", default-features = false }
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish", rev = "41e9b16b6ed0de5e685ed83225bddf6e2c0a0dba" }
+jf-primitives = { git = "https://github.com/espressosystems/jellyfish", branch = "refactor-bls" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
 bitvec = { version = "1.0.1", features = ["alloc", "atomic", "serde"] }
-
+ark-serialize = "0.4.0"
+jf-utils = { git = "https://github.com/espressosystems/jellyfish", rev = "41e9b16b6ed0de5e685ed83225bddf6e2c0a0dba" }
 [features]
 default = ["parallel"]
 std = ["ark-std/std"]

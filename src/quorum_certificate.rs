@@ -65,6 +65,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     ) -> Result<(), PrimitivesError>;
 }
 
+// TODO: add CanonicalSerialize/Deserialize
 pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes>(PhantomData<A>);
 
 pub struct StakeTableEntry<A: AggregateableSignatureSchemes> {
@@ -136,6 +137,13 @@ where
                 ver_keys.push(entry.stake_key.clone());
             }
         }
+        if ver_keys.len() != partial_sigs.len() {
+            return Err(ParameterError(format!(
+                "the number of ver_keys {} != the number of partial signatures {}",
+                ver_keys.len(),
+                partial_sigs.len(),
+            )));
+        }
         let sig = A::aggregate(&qc_pp.agg_sig_pp, &ver_keys[..], partial_sigs)?;
 
         Ok((sig, active_keys.into()))
@@ -178,7 +186,133 @@ where
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        let msg = [&qc_vp.stake_table_digest.0, message].concat();
-        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], &msg[..], sig)
+        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jf_primitives::signatures::bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair};
+    use jf_primitives::signatures::SignatureScheme;
+
+    macro_rules! test_quorum_certificate {
+        ($aggsig:tt) => {
+            let mut rng = jf_utils::test_rng();
+            let agg_sig_pp = $aggsig::param_gen(Some(&mut rng)).unwrap();
+            let key_pair1 = KeyPair::generate(&mut rng);
+            let key_pair2 = KeyPair::generate(&mut rng);
+            let key_pair3 = KeyPair::generate(&mut rng);
+            let entry1 = StakeTableEntry::<$aggsig> {
+                stake_key: key_pair1.ver_key(),
+                stake_amount: U256::from(3u8),
+            };
+            let entry2 = StakeTableEntry::<$aggsig> {
+                stake_key: key_pair2.ver_key(),
+                stake_amount: U256::from(5u8),
+            };
+            let entry3 = StakeTableEntry::<$aggsig> {
+                stake_key: key_pair3.ver_key(),
+                stake_amount: U256::from(7u8),
+            };
+            let qc_pp = QCParams::<$aggsig> {
+                stake_table_digest: StakeTableDigest::<$aggsig>(vec![12u8, 2u8, 7u8, 8u8]),
+                stake_entries: vec![entry1, entry2, entry3],
+                threshold: U256::from(10u8),
+                agg_sig_pp,
+            };
+            let msg = vec![72u8];
+            let sig1 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
+                &agg_sig_pp,
+                &msg[..],
+                key_pair1.sign_key_ref(),
+                &mut rng,
+            )
+            .unwrap();
+            let sig2 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
+                &agg_sig_pp,
+                &msg[..],
+                key_pair2.sign_key_ref(),
+                &mut rng,
+            )
+            .unwrap();
+            let sig3 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
+                &agg_sig_pp,
+                &msg[..],
+                key_pair3.sign_key_ref(),
+                &mut rng,
+            )
+            .unwrap();
+
+            // happy path
+            let active_keys = bitvec![0, 1, 1];
+            let qc1 = BitvectorQuorumCertificate::<$aggsig>::assemble(
+                &qc_pp,
+                active_keys.as_bitslice(),
+                &[sig2.clone(), sig3.clone()],
+            )
+            .unwrap();
+            assert!(
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg[..], &qc1.0, &qc1.1)
+                    .is_ok()
+            );
+
+            // bad paths
+            // number of signatures unmatch
+            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
+                &qc_pp,
+                active_keys.as_bitslice(),
+                &[sig2.clone()]
+            )
+            .is_err());
+            // total weight under threshold
+            let active_bad = bitvec![1, 1, 0];
+            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
+                &qc_pp,
+                active_bad.as_bitslice(),
+                &[sig1, sig2.clone()]
+            )
+            .is_err());
+            // wrong bool vector length
+            let active_bad_2 = bitvec![0, 1, 1, 0];
+            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
+                &qc_pp,
+                active_bad_2.as_bitslice(),
+                &[sig2, sig3],
+            )
+            .is_err());
+
+            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
+                &qc_pp,
+                &msg[..],
+                &qc1.0,
+                &active_bad
+            )
+            .is_err());
+            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
+                &qc_pp,
+                &msg[..],
+                &qc1.0,
+                &active_bad_2
+            )
+            .is_err());
+            let bad_msg = vec![70u8];
+            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
+                &qc_pp,
+                &bad_msg[..],
+                &qc1.0,
+                &qc1.1
+            )
+            .is_err());
+        };
+    }
+    #[test]
+    fn test_quorum_certificate() {
+        test_quorum_certificate!(BLSOverBN254CurveSignatureScheme);
+    }
+
+    // #[test]
+    // fn test_serde() {
+    //     // TODO
+    // }
 }
