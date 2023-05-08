@@ -246,14 +246,14 @@ mod tests {
 
             // happy path
             let active_keys = bitvec![0, 1, 1];
-            let qc1 = BitvectorQuorumCertificate::<$aggsig>::assemble(
+            let qc = BitvectorQuorumCertificate::<$aggsig>::assemble(
                 &qc_pp,
                 active_keys.as_bitslice(),
                 &[sig2.clone(), sig3.clone()],
             )
             .unwrap();
             assert!(
-                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg[..], &qc1.0, &qc1.1)
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg[..], &qc.0, &qc.1)
                     .is_ok()
             );
 
@@ -285,14 +285,14 @@ mod tests {
             assert!(BitvectorQuorumCertificate::<$aggsig>::check(
                 &qc_pp,
                 &msg[..],
-                &qc1.0,
+                &qc.0,
                 &active_bad
             )
             .is_err());
             assert!(BitvectorQuorumCertificate::<$aggsig>::check(
                 &qc_pp,
                 &msg[..],
-                &qc1.0,
+                &qc.0,
                 &active_bad_2
             )
             .is_err());
@@ -300,14 +300,14 @@ mod tests {
             assert!(BitvectorQuorumCertificate::<$aggsig>::check(
                 &qc_pp,
                 &bad_msg[..],
-                &qc1.0,
-                &qc1.1
+                &qc.0,
+                &qc.1
             )
             .is_err());
 
             let bad_sig = &sig1;
             assert!(
-                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg, &bad_sig, &qc1.1)
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg, &bad_sig, &qc.1)
                     .is_err()
             );
         };
