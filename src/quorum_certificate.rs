@@ -13,7 +13,7 @@ use jf_primitives::errors::PrimitivesError::ParameterError;
 use jf_primitives::signatures::AggregateableSignatureSchemes;
 
 /// Trait for validating a QC built from different signatures on the same message
-pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes, M> {
+pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes, M: Sized> {
     /// Public parameters for generating the QC
     /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.
     type QCProverParams;
@@ -66,7 +66,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes, M> {
 }
 
 // TODO: add CanonicalSerialize/Deserialize
-pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes, M: Sized>(
+pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes, M>(
     PhantomData<A>,
     PhantomData<M>,
 );
