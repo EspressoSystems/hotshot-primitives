@@ -9,7 +9,6 @@ homepage = "https://github.com/EspressoSystems/hotshot-primitives"
 repository = "https://github.com/EspressoSystems/hotshot-primitives"
 
 [dependencies]
-ark-bls12-377 = "0.4.0"
 ark-bls12-381 = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-ff = "0.4.0"
