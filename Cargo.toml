@@ -22,6 +22,13 @@ serde = { version = "1.0", default-features = false, features = ["derive", "rc"]
 sha3 = "0.10.7"
 tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
 
+[dev-dependencies]
+criterion = "0.4.0"
+
+[[bench]]
+name = "minroot"
+harness = false
+
 [features]
 default = ["parallel"]
 std = ["ark-std/std", "ark-serialize/std", "ark-ff/std"]

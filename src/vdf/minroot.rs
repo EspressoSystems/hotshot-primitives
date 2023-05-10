@@ -68,7 +68,7 @@ impl<F: MinRootField> VDF for MinRoot<F> {
     ) -> Result<(Self::Output, Self::Proof), PrimitivesError> {
         let mut output = *input;
         for i in 0..pp.difficulty {
-            Self::eval_single_step(&mut output, i)?;
+            Self::iterate_in_place(&mut output, i)?;
         }
         Ok((output, output))
     }
@@ -92,7 +92,7 @@ impl<F: MinRootField> VDF for MinRoot<F> {
 
 impl<F: MinRootField> MinRoot<F> {
     #[inline]
-    fn eval_single_step(elem: &mut MinRootElement<F>, round: u64) -> Result<(), PrimitivesError> {
+    fn iterate_in_place(elem: &mut MinRootElement<F>, round: u64) -> Result<(), PrimitivesError> {
         let x = elem.0;
         elem.0 = (x + elem.1).pow(F::EXP_COEF);
         // assert_eq!(elem.0.pow([5u64]), x + elem.1);
