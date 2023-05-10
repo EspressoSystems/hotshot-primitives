@@ -5,6 +5,8 @@ use ark_std::{
 use jf_primitives::errors::PrimitivesError;
 use serde::{Deserialize, Serialize};
 
+pub mod minroot;
+
 /// A trait for VDF proof, evaluation and verification.
 pub trait VDF {
     /// Public parameters
@@ -23,21 +25,18 @@ pub trait VDF {
     /// Concrete instantiations of VDF shall document properly about the correspondence between
     /// the difficulty value and the time required for evaluation/proof generation.
     fn setup<R: CryptoRng + RngCore>(
-        &self,
         difficulty: u64,
         prng: Option<&mut R>,
     ) -> Result<Self::PublicParameter, PrimitivesError>;
 
     /// Computes the VDF output and proof.
     fn eval(
-        &self,
         pp: &Self::PublicParameter,
         input: &Self::Input,
     ) -> Result<(Self::Output, Self::Proof), PrimitivesError>;
 
     /// Verifies a VDF output given the proof.
     fn verify(
-        &self,
         pp: &Self::PublicParameter,
         input: &Self::Input,
         output: &Self::Output,

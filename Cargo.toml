@@ -9,6 +9,8 @@ homepage = "https://github.com/EspressoSystems/hotshot-primitives"
 repository = "https://github.com/EspressoSystems/hotshot-primitives"
 
 [dependencies]
+ark-bls12-377 = "0.4.0"
+ark-bls12-381 = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-ff = "0.4.0"
 ark-serialize = "0.4.0"
@@ -23,5 +25,5 @@ tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag 
 
 [features]
 default = ["parallel"]
-std = ["ark-std/std"]
-parallel = ["jf-primitives/parallel"]
+std = ["ark-std/std", "ark-serialize/std", "ark-ff/std"]
+parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]
