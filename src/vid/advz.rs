@@ -89,7 +89,7 @@ where
 {
     index: usize,
     evals: Vec<P::Evaluation>,
-    proof: P::Proof,
+    aggregate_proof: P::Proof,
 }
 
 // Explanation of trait bounds:
@@ -136,7 +136,7 @@ where
         share: &Self::StorageShare,
         common: &Self::StorageCommon,
     ) -> VidResult<Result<(), ()>> {
-        assert_eq!(share.evals.len(), common.len());
+        assert_eq!(share.evals.len(), common.len()); // TODO don't panic! return Err instead!
 
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
@@ -177,7 +177,7 @@ where
             &aggregate_commit,
             &Self::index_to_point(share.index),
             &aggregate_value,
-            &share.proof,
+            &share.aggregate_proof,
         )?
         .then_some(())
         .ok_or(()))
@@ -284,14 +284,14 @@ where
                 .zip(storage_node_evals)
                 .enumerate()
                 .map(|(index, (scalar, evals))| {
-                    let storage_node_poly =
+                    let aggregate_poly =
                         polynomial_eval(polys.iter().map(PolynomialMultiplier), scalar);
-                    let (proof, _value) =
-                        P::open(&self.ck, &storage_node_poly, &Self::index_to_point(index))?;
+                    let (aggregate_proof, _value) =
+                        P::open(&self.ck, &aggregate_poly, &Self::index_to_point(index))?;
                     Ok(Share {
                         index,
                         evals,
-                        proof,
+                        aggregate_proof,
                     })
                 })
                 .collect::<Result<_, anyhow::Error>>()?,
