@@ -136,7 +136,13 @@ where
         share: &Self::StorageShare,
         common: &Self::StorageCommon,
     ) -> VidResult<Result<(), ()>> {
-        assert_eq!(share.evals.len(), common.len()); // TODO don't panic! return Err instead!
+        if share.evals.len() != common.len() {
+            return Err(VidError::Argument(format!(
+                "(share eval, common) lengths differ ({},{})",
+                share.evals.len(),
+                common.len()
+            )));
+        }
 
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
