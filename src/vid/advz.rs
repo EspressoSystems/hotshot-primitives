@@ -27,7 +27,7 @@ use jf_primitives::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
-    pcs::PolynomialCommitmentScheme,
+    pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 
@@ -41,8 +41,8 @@ where
     // TODO uncomment after https://github.com/EspressoSystems/jellyfish/pull/231
     // ck: <P::SRS as StructuredReferenceString>::ProverParam,
     // vk: <P::SRS as StructuredReferenceString>::VerifierParam,
-    ck: P::ProverParam,
-    vk: P::VerifierParam,
+    ck: <P::SRS as StructuredReferenceString>::ProverParam,
+    vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     _phantom_t: PhantomData<T>, // needed for trait bounds
     _phantom_h: PhantomData<H>, // needed for trait bounds
 }
