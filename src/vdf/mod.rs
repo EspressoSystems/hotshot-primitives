@@ -1,9 +1,9 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
     fmt::Debug,
     rand::{CryptoRng, RngCore},
 };
 use jf_primitives::errors::PrimitivesError;
-use serde::{Deserialize, Serialize};
 
 pub mod minroot;
 
@@ -13,13 +13,34 @@ pub trait VDF {
     type PublicParameter;
 
     /// VDF proof.
-    type Proof: Debug + Clone + Send + Sync + for<'a> Deserialize<'a> + Serialize + PartialEq + Eq;
+    type Proof: Debug
+        + Clone
+        + Send
+        + Sync
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + PartialEq
+        + Eq;
 
     /// VDF input.
-    type Input: Debug + Clone + Send + Sync + for<'a> Deserialize<'a> + Serialize + PartialEq + Eq;
+    type Input: Debug
+        + Clone
+        + Send
+        + Sync
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + PartialEq
+        + Eq;
 
     /// VDF output.
-    type Output: Debug + Clone + Send + Sync + for<'a> Deserialize<'a> + Serialize + PartialEq + Eq;
+    type Output: Debug
+        + Clone
+        + Send
+        + Sync
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + PartialEq
+        + Eq;
 
     /// Generates a public parameter from RNG with given difficulty.
     /// Concrete instantiations of VDF shall document properly about the correspondence between

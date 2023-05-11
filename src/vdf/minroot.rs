@@ -1,10 +1,10 @@
 use super::VDF;
+use ark_ec::AffineRepr;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{format, vec::Vec};
 use core::marker::PhantomData;
 use jf_primitives::errors::PrimitivesError;
-use tagged_base64::tagged;
 
 /// MinRoot compatible field
 pub trait MinRootField: PrimeField {
@@ -13,7 +13,6 @@ pub trait MinRootField: PrimeField {
     const EXP_COEF: Self::BigInt;
 }
 
-#[tagged("MINROOT_PP")]
 #[derive(
     Copy,
     Clone,
@@ -30,7 +29,6 @@ pub struct MinRootPP {
     pub difficulty: u64,
 }
 
-#[tagged("MINROOT_ELEMENT")]
 #[derive(
     Copy,
     Clone,
@@ -44,6 +42,17 @@ pub struct MinRootPP {
     CanonicalDeserialize,
 )]
 pub struct MinRootElement<F: MinRootField>(F, F);
+
+impl<F, T> From<T> for MinRootElement<F>
+where
+    T: AffineRepr<BaseField = F>,
+    F: MinRootField,
+{
+    fn from(value: T) -> Self {
+        let (x, y) = value.xy().unwrap();
+        MinRootElement(*x, *y)
+    }
+}
 
 pub struct MinRoot<F: MinRootField> {
     _phantom: PhantomData<F>,
