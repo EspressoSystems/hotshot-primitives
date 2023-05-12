@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["stake_table","vdf"]};
+window.SIDEBAR_ITEMS = {"mod":["stake_table","vdf","vid"]};
