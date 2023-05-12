@@ -13,7 +13,7 @@ use jf_primitives::errors::PrimitivesError::ParameterError;
 use jf_primitives::signatures::AggregateableSignatureSchemes;
 
 /// Trait for validating a QC built from different signatures on the same message
-pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes, M: Sized> {
+pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     /// Public parameters for generating the QC
     /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.
     type QCProverParams;
@@ -33,7 +33,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes, M: Sized
     /// * `returns` - a "simple" signature
     fn partial_sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
-        message: &M,
+        message: &[A::MessageUnit],
         sig_key: &A::SigningKey,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError>;
@@ -59,17 +59,14 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes, M: Sized
     /// * `returns` - nothing if the signature is valid, an error otherwise.
     fn check(
         qc_pp: &Self::QCVerifierParams,
-        message: &M,
+        message: &[A::MessageUnit],
         sig: &A::Signature,
         proof: &Self::Proof,
     ) -> Result<(), PrimitivesError>;
 }
 
 // TODO: add CanonicalSerialize/Deserialize
-pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes, M>(
-    PhantomData<A>,
-    PhantomData<M>,
-);
+pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes>(PhantomData<A>);
 
 pub struct StakeTableEntry<A: AggregateableSignatureSchemes> {
     pub stake_key: A::VerificationKey,
@@ -86,10 +83,9 @@ pub struct QCParams<A: AggregateableSignatureSchemes> {
     pub agg_sig_pp: A::PublicParameter,
 }
 
-impl<A, M> QuorumCertificateValidation<A, M> for BitvectorQuorumCertificate<A, M>
+impl<A> QuorumCertificateValidation<A> for BitvectorQuorumCertificate<A>
 where
     A: AggregateableSignatureSchemes,
-    M: AsRef<[A::MessageUnit]>,
 {
     type QCProverParams = QCParams<A>;
 
@@ -100,7 +96,7 @@ where
 
     fn partial_sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
-        message: &M,
+        message: &[A::MessageUnit],
         sig_key: &A::SigningKey,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError> {
@@ -155,7 +151,7 @@ where
 
     fn check(
         qc_vp: &Self::QCVerifierParams,
-        message: &M,
+        message: &[A::MessageUnit],
         sig: &A::Signature,
         proof: &Self::Proof,
     ) -> Result<(), PrimitivesError> {
@@ -190,7 +186,7 @@ where
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message.as_ref(), sig)
+        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)
     }
 }
 
@@ -201,7 +197,7 @@ mod tests {
     use jf_primitives::signatures::SignatureScheme;
 
     macro_rules! test_quorum_certificate {
-        ($aggsig:tt,$msg:tt) => {
+        ($aggsig:tt) => {
             let mut rng = jf_utils::test_rng();
             let agg_sig_pp = $aggsig::param_gen(Some(&mut rng)).unwrap();
             let key_pair1 = KeyPair::generate(&mut rng);
@@ -226,21 +222,21 @@ mod tests {
                 agg_sig_pp,
             };
             let msg = [72u8; 32];
-            let sig1 = BitvectorQuorumCertificate::<$aggsig, $msg>::partial_sign(
+            let sig1 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
                 &agg_sig_pp,
                 &msg,
                 key_pair1.sign_key_ref(),
                 &mut rng,
             )
             .unwrap();
-            let sig2 = BitvectorQuorumCertificate::<$aggsig, $msg>::partial_sign(
+            let sig2 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
                 &agg_sig_pp,
                 &msg,
                 key_pair2.sign_key_ref(),
                 &mut rng,
             )
             .unwrap();
-            let sig3 = BitvectorQuorumCertificate::<$aggsig, $msg>::partial_sign(
+            let sig3 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
                 &agg_sig_pp,
                 &msg,
                 key_pair3.sign_key_ref(),
@@ -250,20 +246,19 @@ mod tests {
 
             // happy path
             let active_keys = bitvec![0, 1, 1];
-            let qc = BitvectorQuorumCertificate::<$aggsig, $msg>::assemble(
+            let qc = BitvectorQuorumCertificate::<$aggsig>::assemble(
                 &qc_pp,
                 active_keys.as_bitslice(),
                 &[sig2.clone(), sig3.clone()],
             )
             .unwrap();
             assert!(
-                BitvectorQuorumCertificate::<$aggsig, $msg>::check(&qc_pp, &msg, &qc.0, &qc.1)
-                    .is_ok()
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg, &qc.0, &qc.1).is_ok()
             );
 
             // bad paths
             // number of signatures unmatch
-            assert!(BitvectorQuorumCertificate::<$aggsig, $msg>::assemble(
+            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
                 &qc_pp,
                 active_keys.as_bitslice(),
                 &[sig2.clone()]
@@ -271,7 +266,7 @@ mod tests {
             .is_err());
             // total weight under threshold
             let active_bad = bitvec![1, 1, 0];
-            assert!(BitvectorQuorumCertificate::<$aggsig, $msg>::assemble(
+            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
                 &qc_pp,
                 active_bad.as_bitslice(),
                 &[sig1.clone(), sig2.clone()]
@@ -279,21 +274,18 @@ mod tests {
             .is_err());
             // wrong bool vector length
             let active_bad_2 = bitvec![0, 1, 1, 0];
-            assert!(BitvectorQuorumCertificate::<$aggsig, $msg>::assemble(
+            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
                 &qc_pp,
                 active_bad_2.as_bitslice(),
                 &[sig2, sig3],
             )
             .is_err());
 
-            assert!(BitvectorQuorumCertificate::<$aggsig, $msg>::check(
-                &qc_pp,
-                &msg,
-                &qc.0,
-                &active_bad
-            )
-            .is_err());
-            assert!(BitvectorQuorumCertificate::<$aggsig, $msg>::check(
+            assert!(
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg, &qc.0, &active_bad)
+                    .is_err()
+            );
+            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
                 &qc_pp,
                 &msg,
                 &qc.0,
@@ -301,22 +293,21 @@ mod tests {
             )
             .is_err());
             let bad_msg = [70u8; 32];
-            assert!(BitvectorQuorumCertificate::<$aggsig, $msg>::check(
-                &qc_pp, &bad_msg, &qc.0, &qc.1
-            )
-            .is_err());
+            assert!(
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &bad_msg, &qc.0, &qc.1)
+                    .is_err()
+            );
 
             let bad_sig = &sig1;
-            assert!(BitvectorQuorumCertificate::<$aggsig, $msg>::check(
-                &qc_pp, &msg, &bad_sig, &qc.1
-            )
-            .is_err());
+            assert!(
+                BitvectorQuorumCertificate::<$aggsig>::check(&qc_pp, &msg, &bad_sig, &qc.1)
+                    .is_err()
+            );
         };
     }
     #[test]
     fn test_quorum_certificate() {
-        type Msg = [u8; 32];
-        test_quorum_certificate!(BLSOverBN254CurveSignatureScheme, Msg);
+        test_quorum_certificate!(BLSOverBN254CurveSignatureScheme);
     }
 
     // #[test]
