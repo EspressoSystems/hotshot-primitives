@@ -31,16 +31,18 @@ use jf_primitives::{
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 
-/// Concrete impl for [`VidScheme`].
+/// Context data for the ADVZ VID scheme.
+///
+/// This struct is a concrete impl for [`VidScheme`].
+/// Generic parameters `T`, `H` are needed only to express trait bounds in the impl for [`VidScheme`].
+/// - `H` is a hasher.
+/// - `T` is a group.
 pub struct Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme,
 {
     payload_chunk_size: usize,
     num_storage_nodes: usize,
-    // TODO uncomment after https://github.com/EspressoSystems/jellyfish/pull/231
-    // ck: <P::SRS as StructuredReferenceString>::ProverParam,
-    // vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     ck: <P::SRS as StructuredReferenceString>::ProverParam,
     vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     _phantom_t: PhantomData<T>, // needed for trait bounds
