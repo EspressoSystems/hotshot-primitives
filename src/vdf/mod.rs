@@ -1,3 +1,4 @@
+//! Trait and implementation for a Verifiable Delay Function (VDF).
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
     fmt::Debug,
