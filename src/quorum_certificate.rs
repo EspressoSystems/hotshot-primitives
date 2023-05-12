@@ -28,6 +28,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     /// E.g: snark proof, bitmap corresponding to the public keys involved in signing
     type Proof;
 
+    /// Allows to fix the size of the message at compilation time.
     type MessageLength: ArrayLength<A::MessageUnit>;
 
     /// Produces a partial signature on a message with a single user signing key
@@ -37,7 +38,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     /// * `returns` - a "simple" signature
     fn partial_sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
-        message: &GenericArray<A::MessageUnit, Self::MessageLength>, // TODO avoid copy pasting GenericArray<Self::MessageUnit, Self::MessageLength>
+        message: &GenericArray<A::MessageUnit, Self::MessageLength>, // TODO is it possible to avoid copy pasting GenericArray<Self::MessageUnit, Self::MessageLength>?
         sig_key: &A::SigningKey,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError>;
