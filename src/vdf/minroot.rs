@@ -136,6 +136,19 @@ impl MinRootField for ark_bls12_381::Fr {
     ]);
 }
 
+impl MinRootField for ark_pallas::Fr {
+    // modulus 28948022309329048855892746252171976963363056481941647379679742748393362948097
+    // modulus % 3 == 1, modulus % 5 == 2
+    // coef = (4 * modulus - 3) / 5
+    // coef: 23158417847463239084714197001737581570690445185553317903743794198714690358477
+    const EXP_COEF: Self::BigInt = ark_ff::BigInt::<4>([
+        15465117582000704717,
+        5665212537877281354,
+        3689348814741910323,
+        3689348814741910323,
+    ]);
+}
+
 #[cfg(test)]
 mod test {
     use super::{MinRoot, MinRootElement, MinRootField};
@@ -146,6 +159,7 @@ mod test {
     fn test_minroot() {
         test_minroot_helper::<ark_bn254::Fr>();
         test_minroot_helper::<ark_bls12_381::Fr>();
+        test_minroot_helper::<ark_pallas::Fr>();
     }
 
     fn test_minroot_helper<F: MinRootField>() {

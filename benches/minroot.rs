@@ -2,6 +2,7 @@
 extern crate criterion;
 use ark_bls12_381::Fr as Fr381;
 use ark_bn254::Fr as Fr254;
+use ark_pallas::Fr as PastaFr;
 use ark_std::rand::rngs::StdRng;
 use criterion::Criterion;
 use hotshot_primitives::vdf::{
@@ -21,6 +22,11 @@ fn minroot_bench(c: &mut Criterion) {
     let input = MinRootElement::<Fr381>::default();
     benchmark_group.bench_function("MinRoot_BLS381_2^16", |b| {
         b.iter(|| MinRoot::<Fr381>::eval(&pp, &input).unwrap())
+    });
+
+    let input = MinRootElement::<PastaFr>::default();
+    benchmark_group.bench_function("MinRoot_Pallas_2^16", |b| {
+        b.iter(|| MinRoot::<PastaFr>::eval(&pp, &input).unwrap())
     });
 }
 
