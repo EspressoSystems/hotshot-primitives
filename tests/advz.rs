@@ -10,7 +10,7 @@ type Pcs = UnivariateKzgPCS<Bls12_381>;
 type G = <Bls12_381 as Pairing>::G1Affine;
 type H = Sha256;
 
-mod util;
+mod vid;
 
 #[test]
 fn round_trip() {
@@ -23,7 +23,7 @@ fn round_trip() {
                 ::MODULUS_BIT_SIZE - 7)/8 + 1
         );
 
-    util::round_trip(
+    vid::round_trip(
         |payload_chunk_size, num_storage_nodes| {
             Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap()
         },
