@@ -540,6 +540,39 @@ mod tests {
         }
     }
 
+    #[test]
+    fn sad_path_recover_payload_corrupt_shares() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+
+        // unequal share eval lengths
+        let mut shares_missing_evals = shares.clone();
+        for i in 0..shares_missing_evals.len() - 1 {
+            shares_missing_evals[i].evals.pop();
+            assert_arg_err(
+                advz.recover_payload(&shares_missing_evals, &common),
+                format!("{} shares missing 1 eval should be arg error", i + 1).as_str(),
+            );
+        }
+
+        // 1 eval missing from all shares
+        shares_missing_evals.last_mut().unwrap().evals.pop();
+        let bytes_recovered = advz
+            .recover_payload(&shares_missing_evals, &common)
+            .expect("recover_payload should succeed when shares have equal eval lengths");
+        assert_ne!(bytes_recovered, bytes_random);
+
+        // corrupt indices
+        let mut shares_bad_indices = shares; // shares.clone()
+        for share in &mut shares_bad_indices {
+            share.index += 5;
+            let bytes_recovered = advz
+                .recover_payload(&shares_missing_evals, &common)
+                .expect("recover_payload should succeed for any share indices");
+            assert_ne!(bytes_recovered, bytes_random);
+        }
+    }
+
     /// Routine initialization tasks.
     ///
     /// Returns the following tuple:
@@ -551,7 +584,7 @@ mod tests {
         let srs = Pcs::gen_srs_for_testing(&mut rng, payload_chunk_size).unwrap();
         let advz = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
-        let mut bytes_random = vec![0u8; 400];
+        let mut bytes_random = vec![0u8; 4000];
         rng.fill_bytes(&mut bytes_random);
 
         (advz, bytes_random)
