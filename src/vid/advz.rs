@@ -478,10 +478,19 @@ mod tests {
                 evals: share.evals[1..].to_vec(),
                 ..share.clone()
             };
-            assert!(matches!(
+            assert_arg_err(
                 advz.verify_share(&share_missing_eval, &common),
-                Err(Argument(_))
-            ));
+                "1 missing share should be arg error",
+            );
+
+            // bad index
+            let share_bad_index = Share {
+                index: share.index + 5,
+                ..share.clone()
+            };
+            advz.verify_share(&share_bad_index, &common)
+                .unwrap()
+                .expect_err("bad share index should fail verification");
         }
     }
 
@@ -489,11 +498,23 @@ mod tests {
     fn sad_path_verify_share_corrupt_commit() {
         let (advz, bytes_random) = avdz_init();
         let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+
+        // missing commit
         let common_missing_item = common[1..].to_vec();
-        assert!(matches!(
+        assert_arg_err(
             advz.verify_share(&shares[0], &common_missing_item),
-            Err(Argument(_))
-        ));
+            "1 missing commit should be arg error",
+        );
+
+        // 1 corrupt commit
+        let common_1_corruption = {
+            let mut corrupted = common; // common.clone()
+            corrupted[0] = G::zero().into();
+            corrupted
+        };
+        advz.verify_share(&shares[0], &common_1_corruption)
+            .unwrap()
+            .expect_err("1 corrupt commit should fail verification");
     }
 
     #[test]
@@ -501,17 +522,21 @@ mod tests {
         let (advz, bytes_random) = avdz_init();
         let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
 
-        for share in shares {
-            let share_missing_eval = Share {
-                evals: share.evals[1..].to_vec(),
-                ..share.clone()
-            };
-            let common_missing_item = common[1..].to_vec();
+        for mut share in shares {
+            let mut common_missing_items = common.clone();
 
-            // equal amounts of share evals, common items
-            advz.verify_share(&share_missing_eval, &common_missing_item)
-                .unwrap()
-                .unwrap_err();
+            while !common_missing_items.is_empty() {
+                common_missing_items.pop();
+                share.evals.pop();
+
+                // equal amounts of share evals, common items
+                advz.verify_share(&share, &common_missing_items)
+                    .unwrap()
+                    .unwrap_err();
+            }
+
+            // ensure we tested the empty shares edge case
+            assert!(share.evals.is_empty() && common_missing_items.is_empty())
         }
     }
 
@@ -524,11 +549,16 @@ mod tests {
         let (payload_chunk_size, num_storage_nodes) = (3, 5);
         let mut rng = jf_utils::test_rng();
         let srs = Pcs::gen_srs_for_testing(&mut rng, payload_chunk_size).unwrap();
-        let advz = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
+        let advz = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
         let mut bytes_random = vec![0u8; 400];
         rng.fill_bytes(&mut bytes_random);
 
         (advz, bytes_random)
+    }
+
+    /// Convenience wrapper to assert [`VidError::Argument`] return value.
+    fn assert_arg_err<T>(res: VidResult<T>, msg: &str) {
+        assert!(matches!(res, Err(Argument(_))), "{}", msg);
     }
 }
