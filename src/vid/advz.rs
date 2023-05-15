@@ -454,4 +454,81 @@ where
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::{VidError::Argument, *};
+
+    use ark_bls12_381::Bls12_381;
+    use ark_ec::pairing::Pairing;
+    use ark_std::{rand::RngCore, vec};
+    use jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
+    use sha2::Sha256;
+
+    type Pcs = UnivariateKzgPCS<Bls12_381>;
+    type G = <Bls12_381 as Pairing>::G1Affine;
+    type H = Sha256;
+
+    #[test]
+    fn sad_path_verify_share_corrupt_share() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+
+        for share in shares {
+            // missing share eval
+            let share_missing_eval = Share {
+                evals: share.evals[1..].to_vec(),
+                ..share.clone()
+            };
+            assert!(matches!(
+                advz.verify_share(&share_missing_eval, &common),
+                Err(Argument(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn sad_path_verify_share_corrupt_commit() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+        let common_missing_item = common[1..].to_vec();
+        assert!(matches!(
+            advz.verify_share(&shares[0], &common_missing_item),
+            Err(Argument(_))
+        ));
+    }
+
+    #[test]
+    fn sad_path_verify_share_corrupt_share_and_commit() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+
+        for share in shares {
+            let share_missing_eval = Share {
+                evals: share.evals[1..].to_vec(),
+                ..share.clone()
+            };
+            let common_missing_item = common[1..].to_vec();
+
+            // equal amounts of share evals, common items
+            advz.verify_share(&share_missing_eval, &common_missing_item)
+                .unwrap()
+                .unwrap_err();
+        }
+    }
+
+    /// Routine initialization tasks.
+    ///
+    /// Returns the following tuple:
+    /// 1. An initialized [`Advz`] instance.
+    /// 2. A `Vec<u8>` filled with random bytes.
+    fn avdz_init() -> (Advz<Pcs, G, H>, Vec<u8>) {
+        let (payload_chunk_size, num_storage_nodes) = (3, 5);
+        let mut rng = jf_utils::test_rng();
+        let srs = Pcs::gen_srs_for_testing(&mut rng, payload_chunk_size).unwrap();
+        let advz = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
+
+        let mut bytes_random = vec![0u8; 400];
+        rng.fill_bytes(&mut bytes_random);
+
+        (advz, bytes_random)
+    }
+}
