@@ -1,4 +1,4 @@
-use hotshot_primitives::vid::VidScheme;
+use hotshot_primitives::vid::{VidError, VidResult, VidScheme};
 
 use ark_std::{
     println,
@@ -52,6 +52,19 @@ where
             // give all shares for recovery
             let bytes_recovered = vid.recover_payload(&shares, &common).unwrap();
             assert_eq!(bytes_recovered, bytes_random);
+
+            // give insufficient shares for recovery
+            assert_arg_err(
+                vid.recover_payload(&shares[..payload_chunk_size - 1], &common),
+                "insufficient shares should be arg error",
+            );
         }
     }
+}
+
+/// Convenience wrapper to assert [`VidError::Argument`] return value.
+///
+/// TODO: copied code from unit tests---how to reuse unit test code in integration tests?
+pub fn assert_arg_err<T>(res: VidResult<T>, msg: &str) {
+    assert!(matches!(res, Err(VidError::Argument(_))), "{}", msg);
 }
