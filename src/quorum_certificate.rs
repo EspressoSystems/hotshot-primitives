@@ -38,7 +38,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     /// * `returns` - a "simple" signature
     fn partial_sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
-        message: &GenericArray<A::MessageUnit, Self::MessageLength>, // TODO is it possible to avoid copy pasting GenericArray<Self::MessageUnit, Self::MessageLength>?
+        message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         sig_key: &A::SigningKey,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError>;
