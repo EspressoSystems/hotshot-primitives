@@ -483,7 +483,14 @@ mod tests {
                 "1 missing share should be arg error",
             );
 
-            // bad index
+            // corrupted share eval
+            let mut share_bad_eval = share.clone();
+            share_bad_eval.evals[0].double_in_place();
+            advz.verify_share(&share_bad_eval, &common)
+                .unwrap()
+                .expect_err("bad share value should fail verification");
+
+            // corrupted index
             let share_bad_index = Share {
                 index: share.index + 5,
                 ..share.clone()
