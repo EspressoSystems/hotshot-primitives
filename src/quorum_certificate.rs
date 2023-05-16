@@ -31,6 +31,9 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     /// Allows to fix the size of the message at compilation time.
     type MessageLength: ArrayLength<A::MessageUnit>;
 
+    /// Type of some auxiliary information returned by te check function in order to feed oth
+    type CheckedType;
+
     /// Produces a partial signature on a message with a single user signing key
     /// * `agg_sig_pp` - public parameters for aggregate signature
     /// * `message` - message to be signed
@@ -67,7 +70,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         sig: &A::Signature,
         proof: &Self::Proof,
-    ) -> Result<(), PrimitivesError>;
+    ) -> Result<Self::CheckedType, PrimitivesError>;
 }
 
 // TODO: add CanonicalSerialize/Deserialize
@@ -99,6 +102,7 @@ where
 
     type Proof = BitVec;
     type MessageLength = U32;
+    type CheckedType = U256;
 
     fn partial_sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
@@ -160,7 +164,7 @@ where
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         sig: &A::Signature,
         proof: &Self::Proof,
-    ) -> Result<(), PrimitivesError> {
+    ) -> Result<Self::CheckedType, PrimitivesError> {
         if proof.len() != qc_vp.stake_entries.len() {
             return Err(ParameterError(format!(
                 "proof bit vector len {} != the number of stake entries {}",
@@ -192,7 +196,8 @@ where
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)
+        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)?;
+        Ok(U256::zero())
     }
 }
 
