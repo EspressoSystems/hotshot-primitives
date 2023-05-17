@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["BitvectorQuorumCertificate","QCParams","StakeTableDigest","StakeTableEntry"],"trait":["QuorumCertificateValidation"]};
