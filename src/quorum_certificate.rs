@@ -102,7 +102,7 @@ where
 
     type Proof = BitVec;
     type MessageLength = U32;
-    type CheckedType = U256;
+    type CheckedType = ();
 
     fn partial_sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
@@ -196,8 +196,7 @@ where
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)?;
-        Ok(U256::zero())
+        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)
     }
 }
 
