@@ -476,104 +476,150 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::{VidError::Argument, *};
+
     use ark_bls12_381::Bls12_381;
     use ark_ec::pairing::Pairing;
-    use ark_ff::{Field, PrimeField};
-    use ark_std::{
-        println,
-        rand::{seq::SliceRandom, RngCore},
-        vec,
-    };
-    use jf_primitives::pcs::prelude::UnivariateKzgPCS;
-    use jf_utils::test_rng;
+    use ark_std::{rand::RngCore, vec};
+    use jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
     use sha2::Sha256;
 
-    use super::*;
     type Pcs = UnivariateKzgPCS<Bls12_381>;
     type G = <Bls12_381 as Pairing>::G1Affine;
     type H = Sha256;
 
     #[test]
-    fn round_trip() {
-        let vid_sizes = [(2, 3), (3, 9)];
-        let byte_lens = [2, 16, 32, 47, 48, 49, 64, 100, 400];
+    fn sad_path_verify_share_corrupt_share() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
 
-        let mut rng = test_rng();
-        let srs = Pcs::gen_srs_for_testing(
-            &mut test_rng(),
-            vid_sizes.iter().max_by_key(|v| v.0).unwrap().0,
-        )
-        .unwrap();
+        for share in shares {
+            // missing share eval
+            let share_missing_eval = Share {
+                evals: share.evals[1..].to_vec(),
+                ..share.clone()
+            };
+            assert_arg_err(
+                advz.verify_share(&share_missing_eval, &common),
+                "1 missing share should be arg error",
+            );
 
-        println!(
-            "modulus byte len: {}",
-            (<<Pcs as PolynomialCommitmentScheme>::Evaluation as Field>::BasePrimeField
-                ::MODULUS_BIT_SIZE - 7)/8 + 1
-        );
+            // corrupted share eval
+            let mut share_bad_eval = share.clone();
+            share_bad_eval.evals[0].double_in_place();
+            advz.verify_share(&share_bad_eval, &common)
+                .unwrap()
+                .expect_err("bad share value should fail verification");
 
-        for (payload_chunk_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
-
-            for len in byte_lens {
-                println!(
-                    "m: {} n: {} byte_len: {}",
-                    payload_chunk_size, num_storage_nodes, len
-                );
-
-                let mut bytes_random = vec![0u8; len];
-                rng.fill_bytes(&mut bytes_random);
-
-                let (mut shares, common) = vid.dispersal_data(&bytes_random).unwrap();
-                assert_eq!(shares.len(), num_storage_nodes);
-
-                for share in shares.iter() {
-                    vid.verify_share(share, &common).unwrap().unwrap();
-                }
-
-                // sample a random subset of shares with size payload_chunk_size
-                shares.shuffle(&mut rng);
-
-                // give minimum number of shares for recovery
-                let bytes_recovered = vid
-                    .recover_payload(&shares[..payload_chunk_size], &common)
-                    .unwrap();
-                assert_eq!(bytes_recovered, bytes_random);
-
-                // give an intermediate number of shares for recovery
-                let intermediate_num_shares = (payload_chunk_size + num_storage_nodes) / 2;
-                let bytes_recovered = vid
-                    .recover_payload(&shares[..intermediate_num_shares], &common)
-                    .unwrap();
-                assert_eq!(bytes_recovered, bytes_random);
-
-                // give all shares for recovery
-                let bytes_recovered = vid.recover_payload(&shares, &common).unwrap();
-                assert_eq!(bytes_recovered, bytes_random);
-            }
+            // corrupted index
+            let share_bad_index = Share {
+                index: share.index + 5,
+                ..share.clone()
+            };
+            advz.verify_share(&share_bad_index, &common)
+                .unwrap()
+                .expect_err("bad share index should fail verification");
         }
     }
 
     #[test]
-    fn commit_infallibility() {
-        let vid_sizes = [(3, 9)];
-        let byte_lens = [2, 32, 500];
+    fn sad_path_verify_share_corrupt_commit() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
 
-        let mut rng = test_rng();
-        let srs = Pcs::gen_srs_for_testing(
-            &mut test_rng(),
-            vid_sizes.iter().max_by_key(|v| v.0).unwrap().0,
-        )
-        .unwrap();
+        // missing commit
+        let common_missing_item = common[1..].to_vec();
+        assert_arg_err(
+            advz.verify_share(&shares[0], &common_missing_item),
+            "1 missing commit should be arg error",
+        );
 
-        for (payload_chunk_size, num_storage_nodes) in vid_sizes {
-            let vid = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap();
+        // 1 corrupt commit
+        let common_1_corruption = {
+            let mut corrupted = common; // common.clone()
+            corrupted[0] = G::zero().into();
+            corrupted
+        };
+        advz.verify_share(&shares[0], &common_1_corruption)
+            .unwrap()
+            .expect_err("1 corrupt commit should fail verification");
+    }
 
-            for len in byte_lens {
-                let mut random_bytes = vec![0u8; len];
-                rng.fill_bytes(&mut random_bytes);
+    #[test]
+    fn sad_path_verify_share_corrupt_share_and_commit() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
 
-                vid.commit(&random_bytes).unwrap();
+        for mut share in shares {
+            let mut common_missing_items = common.clone();
+
+            while !common_missing_items.is_empty() {
+                common_missing_items.pop();
+                share.evals.pop();
+
+                // equal amounts of share evals, common items
+                advz.verify_share(&share, &common_missing_items)
+                    .unwrap()
+                    .unwrap_err();
             }
+
+            // ensure we tested the empty shares edge case
+            assert!(share.evals.is_empty() && common_missing_items.is_empty())
         }
+    }
+
+    #[test]
+    fn sad_path_recover_payload_corrupt_shares() {
+        let (advz, bytes_random) = avdz_init();
+        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+
+        // unequal share eval lengths
+        let mut shares_missing_evals = shares.clone();
+        for i in 0..shares_missing_evals.len() - 1 {
+            shares_missing_evals[i].evals.pop();
+            assert_arg_err(
+                advz.recover_payload(&shares_missing_evals, &common),
+                format!("{} shares missing 1 eval should be arg error", i + 1).as_str(),
+            );
+        }
+
+        // 1 eval missing from all shares
+        shares_missing_evals.last_mut().unwrap().evals.pop();
+        let bytes_recovered = advz
+            .recover_payload(&shares_missing_evals, &common)
+            .expect("recover_payload should succeed when shares have equal eval lengths");
+        assert_ne!(bytes_recovered, bytes_random);
+
+        // corrupt indices
+        let mut shares_bad_indices = shares; // shares.clone()
+        for share in &mut shares_bad_indices {
+            share.index += 5;
+            let bytes_recovered = advz
+                .recover_payload(&shares_missing_evals, &common)
+                .expect("recover_payload should succeed for any share indices");
+            assert_ne!(bytes_recovered, bytes_random);
+        }
+    }
+
+    /// Routine initialization tasks.
+    ///
+    /// Returns the following tuple:
+    /// 1. An initialized [`Advz`] instance.
+    /// 2. A `Vec<u8>` filled with random bytes.
+    fn avdz_init() -> (Advz<Pcs, G, H>, Vec<u8>) {
+        let (payload_chunk_size, num_storage_nodes) = (3, 5);
+        let mut rng = jf_utils::test_rng();
+        let srs = Pcs::gen_srs_for_testing(&mut rng, payload_chunk_size).unwrap();
+        let advz = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
+
+        let mut bytes_random = vec![0u8; 4000];
+        rng.fill_bytes(&mut bytes_random);
+
+        (advz, bytes_random)
+    }
+
+    /// Convenience wrapper to assert [`VidError::Argument`] return value.
+    fn assert_arg_err<T>(res: VidResult<T>, msg: &str) {
+        assert!(matches!(res, Err(Argument(_))), "{}", msg);
     }
 }
