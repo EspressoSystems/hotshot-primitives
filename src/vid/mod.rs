@@ -24,7 +24,7 @@ pub enum VidError {
     Internal(#[from] anyhow::Error),
 }
 
-type VidResult<T> = Result<T, VidError>;
+pub type VidResult<T> = Result<T, VidError>;
 
 /// VID: Verifiable Information Dispersal
 pub trait VidScheme {

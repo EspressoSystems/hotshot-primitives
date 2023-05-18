@@ -18,16 +18,19 @@ ark-pallas = "0.4.0"
 ark-poly = "0.4.0"
 ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
+bitvec = { version = "1.0.1", default-features = false, features = ["alloc", "atomic", "serde"] }
 derivative = "2.2.0"
 digest = { version = "0.10" }
 displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
+generic-array = "0.14.7"
 jf-primitives = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
 jf-utils = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
 sha3 = "0.10.7"
 tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
 thiserror = "1.0"
+typenum = { version = "1.16.0", no_sstd = true }
 
 [dev-dependencies]
 criterion = "0.4.0"
