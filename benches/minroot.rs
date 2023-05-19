@@ -4,7 +4,7 @@ use ark_bls12_381::Fr as Fr381;
 use ark_bn254::Fr as Fr254;
 use ark_pallas::Fr as PastaFr;
 use ark_std::rand::rngs::StdRng;
-use criterion::Criterion;
+use criterion::{Criterion, Throughput};
 use hotshot_primitives::vdf::{
     minroot::{MinRoot, MinRootElement},
     VDF,
@@ -13,21 +13,26 @@ use hotshot_primitives::vdf::{
 fn minroot_bench(c: &mut Criterion) {
     let mut benchmark_group = c.benchmark_group("MinRoot");
     benchmark_group.sample_size(10);
-    let pp = MinRoot::<Fr254>::setup::<StdRng>(1u64 << 16, None).unwrap();
+    let iterations = 1u64 << 16;
+
+    benchmark_group.throughput(Throughput::Elements(iterations));
+    let pp = MinRoot::<Fr254>::setup::<StdRng>(iterations, None).unwrap();
     let input = MinRootElement::<Fr254>::default();
-    benchmark_group.bench_function("MinRoot_BN254_2^16", |b| {
+    benchmark_group.bench_function("MinRoot_BN254", |b| {
         b.iter(|| MinRoot::<Fr254>::eval(&pp, &input).unwrap())
     });
 
     let input = MinRootElement::<Fr381>::default();
-    benchmark_group.bench_function("MinRoot_BLS381_2^16", |b| {
+    benchmark_group.bench_function("MinRoot_BLS381", |b| {
         b.iter(|| MinRoot::<Fr381>::eval(&pp, &input).unwrap())
     });
 
     let input = MinRootElement::<PastaFr>::default();
-    benchmark_group.bench_function("MinRoot_Pallas_2^16", |b| {
+    benchmark_group.bench_function("MinRoot_Pallas", |b| {
         b.iter(|| MinRoot::<PastaFr>::eval(&pp, &input).unwrap())
     });
+
+    benchmark_group.finish();
 }
 
 fn bench(c: &mut Criterion) {
