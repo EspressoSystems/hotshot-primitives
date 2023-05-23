@@ -1,3 +1,4 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bitvec::prelude::*;
 use core::marker::PhantomData;
 use typenum::U32;
@@ -13,6 +14,7 @@ use generic_array::{ArrayLength, GenericArray};
 use jf_primitives::errors::PrimitivesError;
 use jf_primitives::errors::PrimitivesError::ParameterError;
 use jf_primitives::signatures::AggregateableSignatureSchemes;
+use serde::{Deserialize, Serialize};
 
 /// Trait for validating a QC built from different signatures on the same message
 pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
@@ -26,7 +28,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
 
     /// Extra value to check the aggregated signature of the QC
     /// E.g: snark proof, bitmap corresponding to the public keys involved in signing
-    type Proof;
+    type Proof: Serialize + for<'a> Deserialize<'a>;
 
     /// Allows to fix the size of the message at compilation time.
     type MessageLength: ArrayLength<A::MessageUnit>;
@@ -73,8 +75,10 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     ) -> Result<Self::CheckedType, PrimitivesError>;
 }
 
-// TODO: add CanonicalSerialize/Deserialize
-pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes>(PhantomData<A>);
+#[derive(CanonicalSerialize, CanonicalDeserialize)]
+pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes + Sync + Send>(
+    PhantomData<A>,
+);
 
 pub struct StakeTableEntry<A: AggregateableSignatureSchemes> {
     pub stake_key: A::VerificationKey,
@@ -93,7 +97,7 @@ pub struct QCParams<A: AggregateableSignatureSchemes> {
 
 impl<A> QuorumCertificateValidation<A> for BitvectorQuorumCertificate<A>
 where
-    A: AggregateableSignatureSchemes,
+    A: AggregateableSignatureSchemes + Sync + Send,
 {
     type QCProverParams = QCParams<A>;
 
@@ -270,6 +274,12 @@ mod tests {
             )
             .is_ok());
 
+            // Check the QC can be serialized / deserialized
+            assert_eq!(
+                qc,
+                bincode::deserialize(&bincode::serialize(&qc).unwrap()).unwrap()
+            );
+
             // bad paths
             // number of signatures unmatch
             assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
@@ -332,9 +342,4 @@ mod tests {
     fn test_quorum_certificate() {
         test_quorum_certificate!(BLSOverBN254CurveSignatureScheme);
     }
-
-    // #[test]
-    // fn test_serde() {
-    //     // TODO
-    // }
 }
