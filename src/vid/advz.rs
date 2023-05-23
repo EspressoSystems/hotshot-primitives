@@ -27,6 +27,7 @@ use jf_primitives::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
+    merkle_tree::MerkleTreeScheme,
     pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
@@ -37,7 +38,7 @@ use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 /// Generic parameters `T`, `H` are needed only to express trait bounds in the impl for [`VidScheme`].
 /// - `H` is a hasher.
 /// - `T` is a group.
-pub struct Advz<P, T, H>
+pub struct Advz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -47,9 +48,10 @@ where
     vk: <P::SRS as StructuredReferenceString>::VerifierParam,
     _phantom_t: PhantomData<T>, // needed for trait bounds
     _phantom_h: PhantomData<H>, // needed for trait bounds
+    _phantom_v: PhantomData<V>, // needed for trait bounds
 }
 
-impl<P, T, H> Advz<P, T, H>
+impl<P, T, H, V> Advz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -76,6 +78,7 @@ where
             vk,
             _phantom_t: PhantomData,
             _phantom_h: PhantomData,
+            _phantom_v: PhantomData,
         })
     }
 }
@@ -94,18 +97,31 @@ where
     aggregate_proof: P::Proof,
 }
 
+/// The [`VidScheme::StorageCommon`] type for [`Advz`].
+// #[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
+// #[derivative(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Common<P>
+where
+    P: PolynomialCommitmentScheme,
+{
+    poly_commits: Vec<P::Commitment>,
+    // all_evals_commit: <jf_primitives::merkle_tree::append_only::MerkleTree as MerkleTreeScheme>::Commitment,
+}
+
 // Explanation of trait bounds:
 // 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
 // 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
 // 5: `H` is a hasher
 // TODO switch to `UnivariatePCS` after <https://github.com/EspressoSystems/jellyfish/pull/231>
-impl<P, T, H> VidScheme for Advz<P, T, H>
+impl<P, T, H, V> VidScheme for Advz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
     P::Commitment: From<T> + AsRef<T>,                                                    // 3
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
     H: Digest + DynDigest + Default + Clone + Write,                                      // 5
+    V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
 {
     type Commitment = Output<H>;
     type StorageShare = Share<P>;
@@ -202,13 +218,14 @@ where
     }
 }
 
-impl<P, T, H> Advz<P, T, H>
+impl<P, T, H, V> Advz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
     P::Commitment: From<T> + AsRef<T>,
     T: AffineRepr<ScalarField = P::Evaluation>,
     H: Digest + DynDigest + Default + Clone + Write,
+    V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
 {
     /// Same as [`VidScheme::dispersal_data`] except `payload` is a slice of field elements.
     pub fn dispersal_data_from_elems(
@@ -220,91 +237,98 @@ where
     )> {
         let num_polys = (payload.len() - 1) / self.payload_chunk_size + 1;
 
-        // polys: partition payload into polynomial coefficients
-        // poly_commits: for result `common`
-        // storage_node_evals: evaluate polys at many points for erasure-coded result shares
-        // payload_commit: same as in Vid::commit
-        let (polys, poly_commits, storage_node_evals, payload_commit) = {
-            let mut hasher = H::new();
-            let mut polys = Vec::with_capacity(num_polys);
-            let mut poly_commits = Vec::with_capacity(num_polys);
-            let mut storage_node_evals =
-                vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
-            for coeffs in payload.chunks(self.payload_chunk_size) {
-                let poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
-                let poly_commit = P::commit(&self.ck, &poly)?;
-                poly_commit.serialize_uncompressed(&mut hasher)?;
+        // partition payload into polynomial coefficients
+        let polys: Vec<P::Polynomial> = payload
+            .chunks(self.payload_chunk_size)
+            .map(DenseUVPolynomial::from_coefficients_slice)
+            .collect();
 
-                // TODO use batch_open_fk23
-                for (index, eval) in storage_node_evals.iter_mut().enumerate() {
-                    eval.push(poly.evaluate(&Self::index_to_point(index)));
+        // evaluate polynomials
+        let all_evals = {
+            let mut all_evals = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+
+            // TODO use fk23
+            for poly in polys.iter() {
+                for (index, evals) in all_evals.iter_mut().enumerate() {
+                    evals.push(poly.evaluate(&Self::index_to_point(index)));
                 }
-
-                polys.push(poly);
-                poly_commits.push(poly_commit);
             }
 
             // sanity checks
-            assert_eq!(polys.len(), num_polys);
-            assert_eq!(poly_commits.len(), num_polys);
-            assert_eq!(storage_node_evals.len(), self.num_storage_nodes);
-            for v in storage_node_evals.iter() {
-                assert_eq!(v.len(), num_polys);
+            assert_eq!(all_evals.len(), self.num_storage_nodes);
+            for evals in all_evals.iter() {
+                assert_eq!(evals.len(), num_polys);
             }
 
-            (polys, poly_commits, storage_node_evals, hasher.finalize())
+            all_evals
         };
 
-        // storage_node_scalars[j]: hash(payload_commit, poly_evals(j))
-        //   used for pseudorandom linear combos as per hotshot paper.
-        //
-        // Notes on hash-to-field:
-        // - Can't use `Field::from_random_bytes` because it's fallible
-        //   (in what sense is it from "random" bytes?!)
-        // - `HashToField` does not expose an incremental API (ie. `update`)
-        //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
-        let hasher = H::new().chain_update(payload_commit);
-        let hasher_to_field =
-            <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(HASH_TO_FIELD_DOMAIN_SEP);
-        let storage_node_scalars: Vec<P::Evaluation> = storage_node_evals
-            .iter()
-            .map(|evals| {
-                let mut hasher = hasher.clone();
-                for eval in evals.iter() {
-                    eval.serialize_uncompressed(&mut hasher)?;
-                }
-                Ok(*(hasher_to_field
-                    .hash_to_field(&hasher.finalize(), 1)
-                    .first()
-                    .ok_or_else(|| anyhow!("hash_to_field output is empty"))?))
-            })
-            .collect::<Result<_, anyhow::Error>>()?;
+        // vector commitment to polynomial evaluations
+        // TODO generic over `MerkleTreeScheme`
+        let all_evals_commit = V::from_elems(
+            all_evals.len().checked_next_power_of_two().ok_or_else(|| {
+                VidError::Argument(format!(
+                    "too many storage nodes: {} next power of two overflows",
+                    all_evals.len()
+                ))
+            })?,
+            &all_evals,
+        )?;
 
-        // For each storage node j as per hotshot paper:
-        // -  Compute aggregate polynomial
-        //    as a pseudorandom linear combo of payload polynomials
-        //    via evaluation of the polynomial whose coefficients are payload polynomials
-        //    and whose input point is the pseudorandom scalar.
-        // - Compute aggregate proof for the aggregate polynomial evaluated at j.
-        Ok((
-            storage_node_scalars
-                .iter()
-                .zip(storage_node_evals)
-                .enumerate()
-                .map(|(index, (scalar, evals))| {
-                    let aggregate_poly =
-                        polynomial_eval(polys.iter().map(PolynomialMultiplier), scalar);
-                    let (aggregate_proof, _value) =
-                        P::open(&self.ck, &aggregate_poly, &Self::index_to_point(index))?;
-                    Ok(Share {
-                        index,
-                        evals,
-                        aggregate_proof,
-                    })
-                })
-                .collect::<Result<_, anyhow::Error>>()?,
-            poly_commits,
-        ))
+        // polynomial commitments
+        let poly_commits: Vec<P::Commitment> = polys
+            .iter()
+            .map(|poly| P::commit(&self.ck, poly))
+            .collect::<Result<_, _>>()?;
+
+        // pseudorandom scalar
+        let pseudorandom_scalar: P::Evaluation = {
+            let mut hasher = H::new();
+            for poly_commit in poly_commits.iter() {
+                poly_commit.serialize_uncompressed(&mut hasher)?;
+            }
+            all_evals_commit
+                .commitment()
+                .serialize_uncompressed(&mut hasher)?;
+
+            // Notes on hash-to-field:
+            // - Can't use `Field::from_random_bytes` because it's fallible
+            //   (in what sense is it from "random" bytes?!)
+            // - `HashToField` does not expose an incremental API (ie. `update`)
+            //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
+            let hasher_to_field = <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(
+                HASH_TO_FIELD_DOMAIN_SEP,
+            );
+            *hasher_to_field
+                .hash_to_field(&hasher.finalize(), 1)
+                .first()
+                .ok_or_else(|| anyhow!("hash_to_field output is empty"))?
+        };
+
+        // aggregate polynomial: pseudorandom liner combo of payload polys
+        let aggregate_poly =
+            polynomial_eval(polys.iter().map(PolynomialMultiplier), pseudorandom_scalar);
+
+        // aggregate proofs
+        // TODO use fk23
+        let aggregate_proofs: Vec<P::Proof> = (0..self.num_storage_nodes)
+            .map(|index| {
+                P::open(&self.ck, &aggregate_poly, &Self::index_to_point(index)).map(|ok| ok.0)
+            })
+            .collect::<Result<_, _>>()?;
+
+        let shares = all_evals
+            .into_iter()
+            .zip(aggregate_proofs)
+            .enumerate()
+            .map(|(index, (evals, aggregate_proof))| Share {
+                index,
+                evals,
+                aggregate_proof,
+            })
+            .collect();
+
+        Ok((shares, poly_commits))
     }
 
     /// Same as [`VidScheme::recover_payload`] except returns a [`Vec`] of field elements.
@@ -460,12 +484,16 @@ mod tests {
     use ark_bls12_381::Bls12_381;
     use ark_ec::pairing::Pairing;
     use ark_std::{rand::RngCore, vec};
-    use jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
+    use jf_primitives::{
+        merkle_tree::examples::SHA3MerkleTree,
+        pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
+    };
     use sha2::Sha256;
 
     type Pcs = UnivariateKzgPCS<Bls12_381>;
     type G = <Bls12_381 as Pairing>::G1Affine;
     type H = Sha256;
+    type V = SHA3MerkleTree<Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>;
 
     #[test]
     fn sad_path_verify_share_corrupt_share() {
@@ -585,11 +613,11 @@ mod tests {
     /// Returns the following tuple:
     /// 1. An initialized [`Advz`] instance.
     /// 2. A `Vec<u8>` filled with random bytes.
-    fn avdz_init() -> (Advz<Pcs, G, H>, Vec<u8>) {
+    fn avdz_init() -> (Advz<Pcs, G, H, V>, Vec<u8>) {
         let (payload_chunk_size, num_storage_nodes) = (3, 5);
         let mut rng = jf_utils::test_rng();
         let srs = Pcs::gen_srs_for_testing(&mut rng, payload_chunk_size).unwrap();
-        let advz = Advz::<Pcs, G, H>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
+        let advz = Advz::<Pcs, G, H, V>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
         let mut bytes_random = vec![0u8; 4000];
         rng.fill_bytes(&mut bytes_random);
