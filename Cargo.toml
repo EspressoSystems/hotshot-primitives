@@ -23,6 +23,7 @@ digest = { version = "0.10" }
 displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
 generic-array = "0.14.7"
+jf-relation = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
 jf-primitives = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
 jf-utils = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
