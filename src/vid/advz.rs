@@ -163,54 +163,31 @@ where
             )));
         }
 
-        // let pseudorandom_scalar = Self::pseudorandom_scalar(&common)?;
-
-        // compute payload commitment from polynomial commitments
-        let payload_commitment = {
-            let mut hasher = H::new();
-            for comm in common.poly_commits.iter() {
-                comm.serialize_uncompressed(&mut hasher)?;
-            }
-            hasher.finalize()
-        };
-
-        // compute my pseudorandom scalar
-        let scalar: P::Evaluation = {
-            let mut hasher = H::new().chain_update(payload_commitment);
-            let hasher_to_field = <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(
-                HASH_TO_FIELD_DOMAIN_SEP,
-            );
-            for eval in share.evals.iter() {
-                eval.serialize_uncompressed(&mut hasher)?;
-            }
-            *hasher_to_field
-                .hash_to_field(&hasher.finalize(), 1)
-                .first()
-                .ok_or_else(|| anyhow!("hash_to_field output is empty"))?
-        };
+        let pseudorandom_scalar = Self::pseudorandom_scalar(common)?;
 
         // Compute aggregate polynomial [commitment|evaluation]
         // as a pseudorandom linear combo of [commitments|evaluations]
         // via evaluation of the polynomial whose coefficients are [commitments|evaluations]
         // and whose input point is the pseudorandom scalar.
-        let aggregate_commit = P::Commitment::from(
+        let aggregate_poly_commit = P::Commitment::from(
             polynomial_eval(
                 common
                     .poly_commits
                     .iter()
                     .map(|x| CurveMultiplier(x.as_ref())),
-                scalar,
+                pseudorandom_scalar,
             )
             .into(),
         );
-        let aggregate_value = polynomial_eval(share.evals.iter().map(FieldMultiplier), scalar);
+        let aggregate_eval =
+            polynomial_eval(share.evals.iter().map(FieldMultiplier), pseudorandom_scalar);
 
         // verify aggregate proof
         Ok(P::verify(
             &self.vk,
-            &aggregate_commit,
+            &aggregate_poly_commit,
             &Self::index_to_point(share.index),
-            &aggregate_value,
+            &aggregate_eval,
             &share.aggregate_proof,
         )?
         .then_some(())
@@ -503,7 +480,7 @@ mod tests {
     use ark_ec::pairing::Pairing;
     use ark_std::{rand::RngCore, vec};
     use jf_primitives::{
-        merkle_tree::examples::SHA3MerkleTree,
+        merkle_tree::hasher::HasherMerkleTree,
         pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
     };
     use sha2::Sha256;
@@ -511,7 +488,7 @@ mod tests {
     type Pcs = UnivariateKzgPCS<Bls12_381>;
     type G = <Bls12_381 as Pairing>::G1Affine;
     type H = Sha256;
-    type V = SHA3MerkleTree<Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>;
+    type V = HasherMerkleTree<H, Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>; // TODO: should be automatic, Vec<_> is an impl detail!
 
     #[test]
     fn sad_path_verify_share_corrupt_share() {

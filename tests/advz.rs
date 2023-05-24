@@ -12,7 +12,7 @@ use sha2::Sha256;
 type Pcs = UnivariateKzgPCS<Bls12_381>;
 type G = <Bls12_381 as Pairing>::G1Affine; // should be automatic
 type H = Sha256;
-type V = HasherMerkleTree<H, Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>; // should be automatic, Vec<_> is an impl detail!
+type V = HasherMerkleTree<H, Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>; // TODO: should be automatic, Vec<_> is an impl detail!
 
 mod vid;
 
