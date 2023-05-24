@@ -163,6 +163,8 @@ where
             )));
         }
 
+        // let pseudorandom_scalar = Self::pseudorandom_scalar(&common)?;
+
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
             let mut hasher = H::new();
@@ -273,6 +275,7 @@ where
 
         // vector commitment to polynomial evaluations
         // TODO generic over `MerkleTreeScheme`
+        // TODO need log(checked_next_power_of_two)! Also, use arity instead of 2.
         let all_evals_commit = V::from_elems(
             all_evals.len().checked_next_power_of_two().ok_or_else(|| {
                 VidError::Argument(format!(
@@ -283,14 +286,17 @@ where
             &all_evals,
         )?;
 
-        // polynomial commitments
-        let poly_commits: Vec<P::Commitment> = polys
-            .iter()
-            .map(|poly| P::commit(&self.ck, poly))
-            .collect::<Result<_, _>>()?;
+        // common data
+        let common = Common {
+            poly_commits: polys
+                .iter()
+                .map(|poly| P::commit(&self.ck, poly))
+                .collect::<Result<_, _>>()?,
+            all_evals_commit: all_evals_commit.commitment(),
+        };
 
         // pseudorandom scalar
-        let pseudorandom_scalar = Self::pseudorandom_scalar(&poly_commits, &all_evals_commit)?;
+        let pseudorandom_scalar = Self::pseudorandom_scalar(&common)?;
 
         // aggregate polynomial: pseudorandom liner combo of payload polys
         let aggregate_poly =
@@ -316,13 +322,7 @@ where
             })
             .collect();
 
-        Ok((
-            shares,
-            Common {
-                poly_commits,
-                all_evals_commit: all_evals_commit.commitment(),
-            },
-        ))
+        Ok((shares, common))
     }
 
     /// Same as [`VidScheme::recover_payload`] except returns a [`Vec`] of field elements.
@@ -380,15 +380,14 @@ where
     }
 
     fn pseudorandom_scalar(
-        poly_commits: &[P::Commitment],
-        all_evals_commit: &V,
+        common: &<Self as VidScheme>::StorageCommon,
     ) -> VidResult<P::Evaluation> {
         let mut hasher = H::new();
-        for poly_commit in poly_commits.iter() {
+        for poly_commit in common.poly_commits.iter() {
             poly_commit.serialize_uncompressed(&mut hasher)?;
         }
-        all_evals_commit
-            .commitment()
+        common
+            .all_evals_commit
             .serialize_uncompressed(&mut hasher)?;
 
         // Notes on hash-to-field:
