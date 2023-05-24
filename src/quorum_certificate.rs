@@ -1,6 +1,6 @@
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bitvec::prelude::*;
 use core::marker::PhantomData;
+//use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use typenum::U32;
 
 use ark_std::{
@@ -17,14 +17,17 @@ use jf_primitives::signatures::AggregateableSignatureSchemes;
 use serde::{Deserialize, Serialize};
 
 /// Trait for validating a QC built from different signatures on the same message
-pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
+pub trait QuorumCertificateValidation<
+    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
+>
+{
     /// Public parameters for generating the QC
     /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.
-    type QCProverParams;
+    type QCProverParams; //: Serialize + for<'a> Deserialize<'a>;
 
     /// Public parameters for validating the QC
     /// E.g: verifying keys, stake table commitment
-    type QCVerifierParams;
+    type QCVerifierParams; //: Serialize + for<'a> Deserialize<'a>;
 
     /// Extra value to check the aggregated signature of the QC
     /// E.g: snark proof, bitmap corresponding to the public keys involved in signing
@@ -75,19 +78,22 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     ) -> Result<Self::CheckedType, PrimitivesError>;
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize)]
-pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes + Sync + Send>(
-    PhantomData<A>,
-);
+#[derive(Serialize, Deserialize)]
+pub struct BitvectorQuorumCertificate<
+    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
+>(PhantomData<A>);
 
+#[derive(Serialize, Deserialize)]
 pub struct StakeTableEntry<A: AggregateableSignatureSchemes> {
     pub stake_key: A::VerificationKey,
     pub stake_amount: U256,
 }
 
+//#[derive(Serialize, Deserialize)]
 pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit>);
 
 // TODO: refactor
+//#[derive(CanonicalSerialize, CanonicalDeserialize)]
 pub struct QCParams<A: AggregateableSignatureSchemes> {
     pub stake_table_digest: StakeTableDigest<A>,
     pub stake_entries: Vec<StakeTableEntry<A>>,
@@ -97,7 +103,7 @@ pub struct QCParams<A: AggregateableSignatureSchemes> {
 
 impl<A> QuorumCertificateValidation<A> for BitvectorQuorumCertificate<A>
 where
-    A: AggregateableSignatureSchemes + Sync + Send,
+    A: AggregateableSignatureSchemes,
 {
     type QCProverParams = QCParams<A>;
 
