@@ -239,6 +239,7 @@ mod tests {
                 stake_amount: U256::from(7u8),
             };
             let qc_pp = QCParams {
+                // TODO remove
                 //stake_table_digest: StakeTableDigest::<$aggsig>(vec![12u8, 2u8, 7u8, 8u8]),
                 stake_entries: vec![entry1, entry2, entry3],
                 threshold: U256::from(10u8),
