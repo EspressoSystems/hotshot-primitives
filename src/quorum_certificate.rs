@@ -23,11 +23,11 @@ pub trait QuorumCertificateValidation<
 {
     /// Public parameters for generating the QC
     /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.
-    type QCProverParams; //: Serialize + for<'a> Deserialize<'a>;
+    type QCProverParams: Serialize; //: Serialize + for<'a> Deserialize<'a>;
 
     /// Public parameters for validating the QC
     /// E.g: verifying keys, stake table commitment
-    type QCVerifierParams; //: Serialize + for<'a> Deserialize<'a>;
+    type QCVerifierParams: Serialize; //: Serialize + for<'a> Deserialize<'a>;
 
     /// Extra value to check the aggregated signature of the QC
     /// E.g: snark proof, bitmap corresponding to the public keys involved in signing
@@ -84,8 +84,8 @@ pub struct BitvectorQuorumCertificate<
 >(PhantomData<A>);
 
 #[derive(Serialize, Deserialize)]
-pub struct StakeTableEntry<A: AggregateableSignatureSchemes> {
-    pub stake_key: A::VerificationKey,
+pub struct StakeTableEntry<V> {
+    pub stake_key: V,
     pub stake_amount: U256,
 }
 
@@ -93,22 +93,22 @@ pub struct StakeTableEntry<A: AggregateableSignatureSchemes> {
 pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit>);
 
 // TODO: refactor
-//#[derive(CanonicalSerialize, CanonicalDeserialize)]
-pub struct QCParams<A: AggregateableSignatureSchemes> {
+#[derive(Serialize, Deserialize)] //, CanonicalDeserialize)]
+pub struct QCParams<V, P> {
     // pub stake_table_digest: StakeTableDigest<A>,
-    pub stake_entries: Vec<StakeTableEntry<A>>,
+    pub stake_entries: Vec<StakeTableEntry<V>>,
     pub threshold: U256,
-    pub agg_sig_pp: A::PublicParameter,
+    pub agg_sig_pp: P,
 }
 
 impl<A> QuorumCertificateValidation<A> for BitvectorQuorumCertificate<A>
 where
-    A: AggregateableSignatureSchemes,
+    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
 {
-    type QCProverParams = QCParams<A>;
+    type QCProverParams = QCParams<A::VerificationKey, A::PublicParameter>;
 
     // TODO: later with SNARKs we'll use a smaller verifier parameter
-    type QCVerifierParams = QCParams<A>;
+    type QCVerifierParams = QCParams<A::VerificationKey, A::PublicParameter>;
 
     type Proof = BitVec;
     type MessageLength = U32;
@@ -223,19 +223,19 @@ mod tests {
             let key_pair1 = KeyPair::generate(&mut rng);
             let key_pair2 = KeyPair::generate(&mut rng);
             let key_pair3 = KeyPair::generate(&mut rng);
-            let entry1 = StakeTableEntry::<$aggsig> {
+            let entry1 = StakeTableEntry {
                 stake_key: key_pair1.ver_key(),
                 stake_amount: U256::from(3u8),
             };
-            let entry2 = StakeTableEntry::<$aggsig> {
+            let entry2 = StakeTableEntry {
                 stake_key: key_pair2.ver_key(),
                 stake_amount: U256::from(5u8),
             };
-            let entry3 = StakeTableEntry::<$aggsig> {
+            let entry3 = StakeTableEntry {
                 stake_key: key_pair3.ver_key(),
                 stake_amount: U256::from(7u8),
             };
-            let qc_pp = QCParams::<$aggsig> {
+            let qc_pp = QCParams {
                 //stake_table_digest: StakeTableDigest::<$aggsig>(vec![12u8, 2u8, 7u8, 8u8]),
                 stake_entries: vec![entry1, entry2, entry3],
                 threshold: U256::from(10u8),
