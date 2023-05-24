@@ -4,15 +4,15 @@ use ark_bls12_381::Bls12_381;
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, PrimeField};
 use jf_primitives::{
-    merkle_tree::examples::SHA3MerkleTree,
+    merkle_tree::hasher::HasherMerkleTree,
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
 };
 use sha2::Sha256;
 
 type Pcs = UnivariateKzgPCS<Bls12_381>;
-type G = <Bls12_381 as Pairing>::G1Affine;
+type G = <Bls12_381 as Pairing>::G1Affine; // should be automatic
 type H = Sha256;
-type V = SHA3MerkleTree<Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>;
+type V = HasherMerkleTree<H, Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>; // should be automatic, Vec<_> is an impl detail!
 
 mod vid;
 
