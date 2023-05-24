@@ -95,7 +95,7 @@ pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit
 // TODO: refactor
 //#[derive(CanonicalSerialize, CanonicalDeserialize)]
 pub struct QCParams<A: AggregateableSignatureSchemes> {
-    pub stake_table_digest: StakeTableDigest<A>,
+    // pub stake_table_digest: StakeTableDigest<A>,
     pub stake_entries: Vec<StakeTableEntry<A>>,
     pub threshold: U256,
     pub agg_sig_pp: A::PublicParameter,
@@ -236,7 +236,7 @@ mod tests {
                 stake_amount: U256::from(7u8),
             };
             let qc_pp = QCParams::<$aggsig> {
-                stake_table_digest: StakeTableDigest::<$aggsig>(vec![12u8, 2u8, 7u8, 8u8]),
+                //stake_table_digest: StakeTableDigest::<$aggsig>(vec![12u8, 2u8, 7u8, 8u8]),
                 stake_entries: vec![entry1, entry2, entry3],
                 threshold: U256::from(10u8),
                 agg_sig_pp,
