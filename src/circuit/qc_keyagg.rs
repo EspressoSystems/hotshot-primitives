@@ -1,8 +1,9 @@
 //! Circuit implementation of stake key aggregation for quorum certificates.
 
+use ark_std::{format, vec};
 use jf_primitives::rescue::RescueParameter;
 use jf_relation::{
-    errors::CircuitError, gadgets::ecc::PointVariable, BoolVar, PlonkCircuit, Variable,
+    errors::CircuitError, gadgets::ecc::PointVariable, BoolVar, Circuit, PlonkCircuit, Variable,
 };
 
 #[derive(Debug, Clone)]
@@ -73,11 +74,23 @@ where
 
     fn check_threshold(
         &mut self,
-        _stake_amts: &[Variable],
-        _bit_vec: &[BoolVar],
-        _threshold: Variable,
+        stake_amts: &[Variable],
+        bit_vec: &[BoolVar],
+        threshold: Variable,
     ) -> Result<(), CircuitError> {
-        todo!()
+        if stake_amts.len() != bit_vec.len() {
+            return Err(CircuitError::ParameterError(format!(
+                "bit vector len {} != the number of stake entries {}",
+                bit_vec.len(),
+                stake_amts.len(),
+            )));
+        }
+        let mut active_amts = vec![];
+        for (&stake_amt, &bit) in stake_amts.iter().zip(bit_vec.iter()) {
+            active_amts.push(self.mul(stake_amt, bit.into())?);
+        }
+        let sum = self.sum(&active_amts[..])?;
+        self.enforce_geq(sum, threshold)
     }
 }
 
