@@ -251,17 +251,21 @@ where
         };
 
         // vector commitment to polynomial evaluations
-        // TODO generic over `MerkleTreeScheme`
-        // TODO need log(checked_next_power_of_two)! Also, use arity instead of 2.
-        let all_evals_commit = V::from_elems(
-            all_evals.len().checked_next_power_of_two().ok_or_else(|| {
+        // TODO why do I need to compute the height of the merkle tree?
+        let height: usize = all_evals
+            .len()
+            .checked_ilog(V::ARITY)
+            .ok_or_else(|| {
                 VidError::Argument(format!(
-                    "too many storage nodes: {} next power of two overflows",
-                    all_evals.len()
+                    "num_storage_nodes {} log base {} invalid",
+                    all_evals.len(),
+                    V::ARITY
                 ))
-            })?,
-            &all_evals,
-        )?;
+            })?
+            .try_into()
+            .expect("num_storage_nodes log base arity should fit into usize");
+        let height = height + 1; // avoid fully qualified syntax for try_into()
+        let all_evals_commit = V::from_elems(height, &all_evals)?;
 
         // common data
         let common = Common {
