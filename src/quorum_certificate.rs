@@ -1,6 +1,6 @@
+use ark_std::fmt::Debug;
 use bitvec::prelude::*;
 use core::marker::PhantomData;
-//use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use typenum::U32;
 
 use ark_std::{
@@ -83,18 +83,21 @@ pub struct BitvectorQuorumCertificate<
     A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
 >(PhantomData<A>);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct StakeTableEntry<V> {
     pub stake_key: V,
     pub stake_amount: U256,
 }
 
+// TODO remove this
 //#[derive(Serialize, Deserialize)]
-pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit>);
+//pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit>);
 
-// TODO: refactor
-#[derive(Serialize, Deserialize)] //, CanonicalDeserialize)]
+// TODO: refactor: @binyi was this the refactor you had in mind (i.e removing the trait bound on the QCParams parameters as they create troubles for SerDe)?
+// See commit ee7e7207ce1a6fb13506b4d2989b54f82e70917c
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct QCParams<V, P> {
+    // TODO remove stake_table_digest? It is not used and creates complications for serde in Jellyfish with the Schnorr signature due to A::MessageUnit
     // pub stake_table_digest: StakeTableDigest<A>,
     pub stake_entries: Vec<StakeTableEntry<V>>,
     pub threshold: U256,
@@ -280,10 +283,15 @@ mod tests {
             )
             .is_ok());
 
-            // Check the QC can be serialized / deserialized
+            // Check the QC and the QCParams can be serialized / deserialized
             assert_eq!(
                 qc,
                 bincode::deserialize(&bincode::serialize(&qc).unwrap()).unwrap()
+            );
+
+            assert_eq!(
+                qc_pp,
+                bincode::deserialize(&bincode::serialize(&qc_pp).unwrap()).unwrap()
             );
 
             // bad paths
