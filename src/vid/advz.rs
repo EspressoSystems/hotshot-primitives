@@ -290,28 +290,7 @@ where
             .collect::<Result<_, _>>()?;
 
         // pseudorandom scalar
-        let pseudorandom_scalar: P::Evaluation = {
-            let mut hasher = H::new();
-            for poly_commit in poly_commits.iter() {
-                poly_commit.serialize_uncompressed(&mut hasher)?;
-            }
-            all_evals_commit
-                .commitment()
-                .serialize_uncompressed(&mut hasher)?;
-
-            // Notes on hash-to-field:
-            // - Can't use `Field::from_random_bytes` because it's fallible
-            //   (in what sense is it from "random" bytes?!)
-            // - `HashToField` does not expose an incremental API (ie. `update`)
-            //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
-            let hasher_to_field = <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(
-                HASH_TO_FIELD_DOMAIN_SEP,
-            );
-            *hasher_to_field
-                .hash_to_field(&hasher.finalize(), 1)
-                .first()
-                .ok_or_else(|| anyhow!("hash_to_field output is empty"))?
-        };
+        let pseudorandom_scalar = Self::pseudorandom_scalar(&poly_commits, &all_evals_commit)?;
 
         // aggregate polynomial: pseudorandom liner combo of payload polys
         let aggregate_poly =
@@ -333,6 +312,7 @@ where
                 index,
                 evals,
                 aggregate_proof,
+                // TODO add merkle proof
             })
             .collect();
 
@@ -397,6 +377,31 @@ where
 
     fn index_to_point(index: usize) -> P::Point {
         P::Point::from((index + 1) as u64)
+    }
+
+    fn pseudorandom_scalar(
+        poly_commits: &[P::Commitment],
+        all_evals_commit: &V,
+    ) -> VidResult<P::Evaluation> {
+        let mut hasher = H::new();
+        for poly_commit in poly_commits.iter() {
+            poly_commit.serialize_uncompressed(&mut hasher)?;
+        }
+        all_evals_commit
+            .commitment()
+            .serialize_uncompressed(&mut hasher)?;
+
+        // Notes on hash-to-field:
+        // - Can't use `Field::from_random_bytes` because it's fallible
+        //   (in what sense is it from "random" bytes?!)
+        // - `HashToField` does not expose an incremental API (ie. `update`)
+        //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
+        let hasher_to_field =
+            <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(HASH_TO_FIELD_DOMAIN_SEP);
+        Ok(*hasher_to_field
+            .hash_to_field(&hasher.finalize(), 1)
+            .first()
+            .ok_or_else(|| anyhow!("hash_to_field output is empty"))?)
     }
 }
 
