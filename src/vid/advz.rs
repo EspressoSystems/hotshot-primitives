@@ -98,15 +98,16 @@ where
 }
 
 /// The [`VidScheme::StorageCommon`] type for [`Advz`].
-// #[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
-// #[derivative(Clone, Debug, Eq, PartialEq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Common<P>
+#[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
+#[derivative(Clone, Eq, PartialEq)]
+// #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Common<P, V>
 where
     P: PolynomialCommitmentScheme,
+    V: MerkleTreeScheme,
 {
     poly_commits: Vec<P::Commitment>,
-    // all_evals_commit: <jf_primitives::merkle_tree::append_only::MerkleTree as MerkleTreeScheme>::Commitment,
+    all_evals_commit: V::Commitment,
 }
 
 // Explanation of trait bounds:
@@ -125,7 +126,7 @@ where
 {
     type Commitment = Output<H>;
     type StorageShare = Share<P>;
-    type StorageCommon = Vec<P::Commitment>;
+    type StorageCommon = Common<P, V>;
 
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment> {
         let mut hasher = H::new();
@@ -154,18 +155,18 @@ where
         share: &Self::StorageShare,
         common: &Self::StorageCommon,
     ) -> VidResult<Result<(), ()>> {
-        if share.evals.len() != common.len() {
+        if share.evals.len() != common.poly_commits.len() {
             return Err(VidError::Argument(format!(
-                "(share eval, common) lengths differ ({},{})",
+                "(share eval, common poly commit) lengths differ ({},{})",
                 share.evals.len(),
-                common.len()
+                common.poly_commits.len()
             )));
         }
 
         // compute payload commitment from polynomial commitments
         let payload_commitment = {
             let mut hasher = H::new();
-            for comm in common.iter() {
+            for comm in common.poly_commits.iter() {
                 comm.serialize_uncompressed(&mut hasher)?;
             }
             hasher.finalize()
@@ -191,7 +192,14 @@ where
         // via evaluation of the polynomial whose coefficients are [commitments|evaluations]
         // and whose input point is the pseudorandom scalar.
         let aggregate_commit = P::Commitment::from(
-            polynomial_eval(common.iter().map(|x| CurveMultiplier(x.as_ref())), scalar).into(),
+            polynomial_eval(
+                common
+                    .poly_commits
+                    .iter()
+                    .map(|x| CurveMultiplier(x.as_ref())),
+                scalar,
+            )
+            .into(),
         );
         let aggregate_value = polynomial_eval(share.evals.iter().map(FieldMultiplier), scalar);
 
@@ -328,7 +336,13 @@ where
             })
             .collect();
 
-        Ok((shares, poly_commits))
+        Ok((
+            shares,
+            Common {
+                poly_commits,
+                all_evals_commit: all_evals_commit.commitment(),
+            },
+        ))
     }
 
     /// Same as [`VidScheme::recover_payload`] except returns a [`Vec`] of field elements.
@@ -535,7 +549,10 @@ mod tests {
         let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
 
         // missing commit
-        let common_missing_item = common[1..].to_vec();
+        let common_missing_item = Common {
+            poly_commits: common.poly_commits[1..].to_vec(),
+            ..common.clone()
+        };
         assert_arg_err(
             advz.verify_share(&shares[0], &common_missing_item),
             "1 missing commit should be arg error",
@@ -543,8 +560,8 @@ mod tests {
 
         // 1 corrupt commit
         let common_1_corruption = {
-            let mut corrupted = common; // common.clone()
-            corrupted[0] = G::zero().into();
+            let mut corrupted = common;
+            corrupted.poly_commits[0] = G::zero().into();
             corrupted
         };
         advz.verify_share(&shares[0], &common_1_corruption)
@@ -560,8 +577,8 @@ mod tests {
         for mut share in shares {
             let mut common_missing_items = common.clone();
 
-            while !common_missing_items.is_empty() {
-                common_missing_items.pop();
+            while !common_missing_items.poly_commits.is_empty() {
+                common_missing_items.poly_commits.pop();
                 share.evals.pop();
 
                 // equal amounts of share evals, common items
@@ -571,7 +588,7 @@ mod tests {
             }
 
             // ensure we tested the empty shares edge case
-            assert!(share.evals.is_empty() && common_missing_items.is_empty())
+            assert!(share.evals.is_empty() && common_missing_items.poly_commits.is_empty())
         }
     }
 

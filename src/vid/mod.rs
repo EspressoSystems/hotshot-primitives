@@ -41,13 +41,7 @@ pub trait VidScheme {
         + Sync; // TODO missing upstream Hash, Send
 
     /// Common data sent to all storage nodes.
-    type StorageCommon: CanonicalSerialize
-        + CanonicalDeserialize
-        + Clone
-        + Debug
-        + Eq
-        + PartialEq
-        + Sync; // TODO missing upstream Hash, Send
+    type StorageCommon: CanonicalSerialize + CanonicalDeserialize + Clone + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send, Debug
 
     /// Compute a payload commitment.
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment>;
