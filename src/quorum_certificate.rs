@@ -93,8 +93,6 @@ pub struct StakeTableEntry<V> {
 //#[derive(Serialize, Deserialize)]
 //pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit>);
 
-// TODO: refactor: @binyi was this the refactor you had in mind (i.e removing the trait bound on the QCParams parameters as they create troubles for SerDe)?
-// See commit ee7e7207ce1a6fb13506b4d2989b54f82e70917c
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct QCParams<V, P> {
     // TODO remove stake_table_digest? It is not used and creates complications for serde in Jellyfish with the Schnorr signature due to A::MessageUnit
