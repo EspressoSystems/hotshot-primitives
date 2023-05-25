@@ -40,6 +40,7 @@ pub trait QuorumCertificateValidation<
     type CheckedType;
 
     /// Produces a partial signature on a message with a single user signing key
+    /// NOTE: the original message (vote) should be prefixed with the hash of the stake table.
     /// * `agg_sig_pp` - public parameters for aggregate signature
     /// * `message` - message to be signed
     /// * `signing_keys` - user signing key
@@ -89,14 +90,8 @@ pub struct StakeTableEntry<V> {
     pub stake_amount: U256,
 }
 
-// TODO remove this
-//#[derive(Serialize, Deserialize)]
-//pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit>);
-
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct QCParams<V, P> {
-    // TODO remove stake_table_digest? It is not used and creates complications for serde in Jellyfish with the Schnorr signature due to A::MessageUnit
-    // pub stake_table_digest: StakeTableDigest<A>,
     pub stake_entries: Vec<StakeTableEntry<V>>,
     pub threshold: U256,
     pub agg_sig_pp: P,
@@ -237,8 +232,6 @@ mod tests {
                 stake_amount: U256::from(7u8),
             };
             let qc_pp = QCParams {
-                // TODO remove
-                //stake_table_digest: StakeTableDigest::<$aggsig>(vec![12u8, 2u8, 7u8, 8u8]),
                 stake_entries: vec![entry1, entry2, entry3],
                 threshold: U256::from(10u8),
                 agg_sig_pp,
