@@ -29,19 +29,13 @@ pub type VidResult<T> = Result<T, VidError>;
 /// VID: Verifiable Information Dispersal
 pub trait VidScheme {
     /// Payload commitment.
-    type Commitment: Clone + Debug + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send
+    type Commitment: Clone + Debug + Eq + PartialEq + Sync; // TODO https://github.com/EspressoSystems/jellyfish/issues/253
 
     /// Share-specific data sent to a storage node.
-    type StorageShare: CanonicalSerialize
-        + CanonicalDeserialize
-        + Clone
-        + Debug
-        + Eq
-        + PartialEq
-        + Sync; // TODO missing upstream Hash, Send
+    type StorageShare: Clone + Debug + Sync; // TODO https://github.com/EspressoSystems/jellyfish/issues/253
 
     /// Common data sent to all storage nodes.
-    type StorageCommon: CanonicalSerialize + CanonicalDeserialize + Clone + Eq + PartialEq + Sync; // TODO missing upstream Hash, Send, Debug
+    type StorageCommon: CanonicalSerialize + CanonicalDeserialize + Clone + Eq + PartialEq + Sync; // TODO https://github.com/EspressoSystems/jellyfish/issues/253
 
     /// Compute a payload commitment.
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment>;

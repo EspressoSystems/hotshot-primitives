@@ -13,6 +13,7 @@ use ark_poly::{DenseUVPolynomial, Polynomial};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Write};
 use ark_std::{
     borrow::Borrow,
+    fmt::Debug,
     format,
     marker::PhantomData,
     ops::{Add, Mul},
@@ -27,7 +28,7 @@ use jf_primitives::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
-    merkle_tree::MerkleTreeScheme,
+    merkle_tree::{LookupResult, MerkleTreeScheme},
     pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
@@ -86,15 +87,18 @@ where
 /// The [`VidScheme::StorageShare`] type for [`Advz`].
 // Can't use `[#derive]` for `Share<P>` due to https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
 // Workaround: use `[#derivative]`
-#[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
-#[derivative(Clone, Debug, Eq, PartialEq)]
-pub struct Share<P>
+#[derive(Derivative)]
+#[derivative(Clone, Debug)]
+pub struct Share<P, V>
 where
     P: PolynomialCommitmentScheme,
+    V: MerkleTreeScheme,
+    V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
 {
     index: usize,
     evals: Vec<P::Evaluation>,
     aggregate_proof: P::Proof,
+    evals_proof: V::MembershipProof,
 }
 
 /// The [`VidScheme::StorageCommon`] type for [`Advz`].
@@ -123,9 +127,11 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
     H: Digest + DynDigest + Default + Clone + Write,                                      // 5
     V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
+    V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
+    V::Index: From<u64>,
 {
     type Commitment = Output<H>;
-    type StorageShare = Share<P>;
+    type StorageShare = Share<P, V>;
     type StorageCommon = Common<P, V>;
 
     fn commit(&self, payload: &[u8]) -> VidResult<Self::Commitment> {
@@ -213,6 +219,8 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,
     H: Digest + DynDigest + Default + Clone + Write,
     V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
+    V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
+    V::Index: From<u64>,
 {
     /// Same as [`VidScheme::dispersal_data`] except `payload` is a slice of field elements.
     pub fn dispersal_data_from_elems(
@@ -295,13 +303,23 @@ where
             .into_iter()
             .zip(aggregate_proofs)
             .enumerate()
-            .map(|(index, (evals, aggregate_proof))| Share {
-                index,
-                evals,
-                aggregate_proof,
-                // TODO add merkle proof
+            .map(|(index, (evals, aggregate_proof))| {
+                Ok(Share {
+                    index,
+                    evals,
+                    aggregate_proof,
+                    evals_proof: {
+                        if let LookupResult::Ok(_, proof) =
+                            all_evals_commit.lookup(V::Index::from(index as u64))
+                        {
+                            proof
+                        } else {
+                            return Err(anyhow!("fail to retrieve eval proof for node {}", index));
+                        }
+                    },
+                })
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         Ok((shares, common))
     }
