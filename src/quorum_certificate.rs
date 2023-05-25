@@ -23,11 +23,11 @@ pub trait QuorumCertificateValidation<
 {
     /// Public parameters for generating the QC
     /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.
-    type QCProverParams: Serialize; //: Serialize + for<'a> Deserialize<'a>;
+    type QCProverParams: Serialize + for<'a> Deserialize<'a>;
 
     /// Public parameters for validating the QC
     /// E.g: verifying keys, stake table commitment
-    type QCVerifierParams: Serialize; //: Serialize + for<'a> Deserialize<'a>;
+    type QCVerifierParams: Serialize + for<'a> Deserialize<'a>;
 
     /// Extra value to check the aggregated signature of the QC
     /// E.g: snark proof, bitmap corresponding to the public keys involved in signing
