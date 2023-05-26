@@ -28,7 +28,7 @@ use jf_primitives::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
-    merkle_tree::{LookupResult, MerkleTreeScheme},
+    merkle_tree::{LookupResult, MerkleCommitment, MerkleTreeScheme},
     pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
@@ -111,7 +111,7 @@ where
     V: MerkleTreeScheme,
 {
     poly_commits: Vec<P::Commitment>,
-    all_evals_commit: V::Commitment,
+    all_evals_digest: V::NodeValue,
 }
 
 // Explanation of trait bounds:
@@ -169,6 +169,9 @@ where
             )));
         }
 
+        // verify eval proof
+        // V::verify(&self, pos, proof)
+
         let pseudorandom_scalar = Self::pseudorandom_scalar(common)?;
 
         // Compute aggregate polynomial [commitment|evaluation]
@@ -219,6 +222,7 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,
     H: Digest + DynDigest + Default + Clone + Write,
     V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
+    // TODO check: are these bounds necessary?
     V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
     V::Index: From<u64>,
 {
@@ -281,13 +285,16 @@ where
                 .iter()
                 .map(|poly| P::commit(&self.ck, poly))
                 .collect::<Result<_, _>>()?,
-            all_evals_commit: all_evals_commit.commitment(),
+            all_evals_digest: all_evals_commit.commitment().digest(),
         };
 
         // pseudorandom scalar
         let pseudorandom_scalar = Self::pseudorandom_scalar(&common)?;
 
-        // aggregate polynomial: pseudorandom liner combo of payload polys
+        // Compute aggregate polynomial
+        // as a pseudorandom linear combo of polynomials
+        // via evaluation of the polynomial whose coefficients are polynomials
+        // and whose input point is the pseudorandom scalar.
         let aggregate_poly =
             polynomial_eval(polys.iter().map(PolynomialMultiplier), pseudorandom_scalar);
 
@@ -386,7 +393,7 @@ where
             poly_commit.serialize_uncompressed(&mut hasher)?;
         }
         common
-            .all_evals_commit
+            .all_evals_digest
             .serialize_uncompressed(&mut hasher)?;
 
         // Notes on hash-to-field:
