@@ -7,9 +7,9 @@ use anyhow::anyhow;
 use ark_ec::AffineRepr;
 use ark_ff::{
     fields::field_hashers::{DefaultFieldHasher, HashToField},
-    Field,
+    FftField, Field,
 };
-use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain, GeneralEvaluationDomain, Polynomial};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Write};
 use ark_std::{
     borrow::Borrow,
@@ -23,11 +23,8 @@ use ark_std::{
 use derivative::Derivative;
 use digest::{crypto_common::Output, Digest, DynDigest};
 use jf_primitives::{
-    erasure_code::{
-        reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
-        ErasureCode,
-    },
     pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
+    reed_solomon_code::reed_solomon_erasure_decode,
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 
@@ -40,11 +37,13 @@ use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 pub struct Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme,
+    P::Evaluation: FftField,
 {
     payload_chunk_size: usize,
     num_storage_nodes: usize,
     ck: <P::SRS as StructuredReferenceString>::ProverParam,
     vk: <P::SRS as StructuredReferenceString>::VerifierParam,
+    domain: Option<GeneralEvaluationDomain<P::Evaluation>>,
     _phantom_t: PhantomData<T>, // needed for trait bounds
     _phantom_h: PhantomData<H>, // needed for trait bounds
 }
@@ -52,6 +51,7 @@ where
 impl<P, T, H> Advz<P, T, H>
 where
     P: PolynomialCommitmentScheme,
+    P::Evaluation: FftField,
 {
     /// Return a new instance of `Self`.
     ///
@@ -69,11 +69,13 @@ where
             )));
         }
         let (ck, vk) = P::trim(srs, payload_chunk_size, None)?;
+        let domain = GeneralEvaluationDomain::<P::Evaluation>::new(num_storage_nodes);
         Ok(Self {
             payload_chunk_size,
             num_storage_nodes,
             ck,
             vk,
+            domain,
             _phantom_t: PhantomData,
             _phantom_h: PhantomData,
         })
@@ -106,6 +108,7 @@ where
     P::Commitment: From<T> + AsRef<T>,                                                    // 3
     T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
     H: Digest + DynDigest + Default + Clone + Write,                                      // 5
+    P::Evaluation: FftField,
 {
     type Commitment = Output<H>;
     type StorageShare = Share<P>;
@@ -183,7 +186,7 @@ where
         Ok(P::verify(
             &self.vk,
             &aggregate_commit,
-            &Self::index_to_point(share.index),
+            &self.index_to_point(share.index),
             &aggregate_value,
             &share.aggregate_proof,
         )?
@@ -209,6 +212,7 @@ where
     P::Commitment: From<T> + AsRef<T>,
     T: AffineRepr<ScalarField = P::Evaluation>,
     H: Digest + DynDigest + Default + Clone + Write,
+    P::Evaluation: FftField,
 {
     /// Same as [`VidScheme::dispersal_data`] except `payload` is a slice of field elements.
     pub fn dispersal_data_from_elems(
@@ -236,8 +240,20 @@ where
                 poly_commit.serialize_uncompressed(&mut hasher)?;
 
                 // TODO use batch_open_fk23
-                for (index, eval) in storage_node_evals.iter_mut().enumerate() {
-                    eval.push(poly.evaluate(&Self::index_to_point(index)));
+                match self.domain {
+                    Some(domain) => {
+                        // FFT
+                        let evaluations = domain.fft(coeffs);
+                        for (v, eval) in storage_node_evals.iter_mut().zip(evaluations) {
+                            v.push(eval);
+                        }
+                    }
+                    None => {
+                        // If FFT fails, using standard polynomial evaluation
+                        for (index, eval) in storage_node_evals.iter_mut().enumerate() {
+                            eval.push(poly.evaluate(&self.index_to_point(index)));
+                        }
+                    }
                 }
 
                 polys.push(poly);
@@ -295,7 +311,7 @@ where
                     let aggregate_poly =
                         polynomial_eval(polys.iter().map(PolynomialMultiplier), scalar);
                     let (aggregate_proof, _value) =
-                        P::open(&self.ck, &aggregate_poly, &Self::index_to_point(index))?;
+                        P::open(&self.ck, &aggregate_poly, &self.index_to_point(index))?;
                     Ok(Share {
                         index,
                         evals,
@@ -343,12 +359,14 @@ where
 
         let result_len = num_polys * self.payload_chunk_size;
         let mut result = Vec::with_capacity(result_len);
+        let eval_points = shares
+            .iter()
+            .map(|s| self.index_to_point(s.index))
+            .collect::<Vec<_>>();
         for i in 0..num_polys {
-            let mut coeffs = ReedSolomonErasureCode::decode(
-                shares.iter().map(|s| ReedSolomonErasureCodeShare {
-                    index: s.index + 1, // 1-based index for ReedSolomonErasureCodeShare
-                    value: s.evals[i],
-                }),
+            let mut coeffs = reed_solomon_erasure_decode(
+                &eval_points,
+                shares.iter().map(|s| s.evals[i]),
                 self.payload_chunk_size,
             )?;
             result.append(&mut coeffs);
@@ -357,8 +375,11 @@ where
         Ok(result)
     }
 
-    fn index_to_point(index: usize) -> P::Point {
-        P::Point::from((index + 1) as u64)
+    fn index_to_point(&self, index: usize) -> P::Point {
+        match self.domain {
+            Some(domain) => domain.element(index),
+            None => P::Point::from((index + 1) as u64),
+        }
     }
 }
 
