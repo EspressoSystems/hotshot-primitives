@@ -28,7 +28,7 @@ use jf_primitives::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
-    merkle_tree::{LookupResult, MerkleCommitment, MerkleTreeScheme},
+    merkle_tree::{MerkleCommitment, MerkleTreeScheme},
     pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
@@ -224,7 +224,6 @@ where
     T: AffineRepr<ScalarField = P::Evaluation>,
     H: Digest + DynDigest + Default + Clone + Write,
     V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
-    // TODO check: are these bounds necessary?
     V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
     V::Index: From<u64>,
 {
@@ -317,19 +316,13 @@ where
                     index,
                     evals,
                     aggregate_proof,
-                    evals_proof: {
-                        // TODO use expect_ok()
-                        if let LookupResult::Ok(_, proof) =
-                            all_evals_commit.lookup(V::Index::from(index as u64))
-                        {
-                            proof
-                        } else {
-                            return Err(anyhow!("fail to retrieve eval proof for node {}", index));
-                        }
-                    },
+                    evals_proof: all_evals_commit
+                        .lookup(V::Index::from(index as u64))
+                        .expect_ok()?
+                        .1,
                 })
             })
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<_, VidError>>()?;
 
         Ok((shares, common))
     }

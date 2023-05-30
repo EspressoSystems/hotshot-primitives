@@ -25,8 +25,10 @@ digest = { version = "0.10" }
 displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
 generic-array = "0.14.7"
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
-jf-utils = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
+# jf-primitives = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
+# jf-utils = { git = "https://github.com/espressosystems/jellyfish" } # , tag = "0.3.0"
+jf-primitives = { path = "../jellyfish/primitives" }
+jf-utils = { path = "../jellyfish/utilities" }
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
 sha3 = "0.10.7"
 tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
@@ -35,7 +37,8 @@ typenum = { version = "1.16.0", no_sstd = true }
 
 [dev-dependencies]
 criterion = "0.4.0"
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish", features = ["test-srs"] } # , tag = "0.3.0"
+# jf-primitives = { git = "https://github.com/espressosystems/jellyfish", features = ["test-srs"] } # , tag = "0.3.0"
+jf-primitives = { path = "../jellyfish/primitives", features = ["test-srs"] }
 sha2 = { version = "0.10" }
 
 [[bench]]
