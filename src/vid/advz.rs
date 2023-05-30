@@ -170,7 +170,9 @@ where
         }
 
         // verify eval proof
-        // V::verify(&self, pos, proof)
+        if V::verify(common.all_evals_digest, &share.evals_proof)?.is_err() {
+            return Ok(Err(()));
+        }
 
         let pseudorandom_scalar = Self::pseudorandom_scalar(common)?;
 
@@ -316,6 +318,7 @@ where
                     evals,
                     aggregate_proof,
                     evals_proof: {
+                        // TODO use expect_ok()
                         if let LookupResult::Ok(_, proof) =
                             all_evals_commit.lookup(V::Index::from(index as u64))
                         {
@@ -401,6 +404,7 @@ where
         //   (in what sense is it from "random" bytes?!)
         // - `HashToField` does not expose an incremental API (ie. `update`)
         //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
+        const HASH_TO_FIELD_DOMAIN_SEP: &[u8; 4] = b"rick";
         let hasher_to_field =
             <DefaultFieldHasher<H> as HashToField<P::Evaluation>>::new(HASH_TO_FIELD_DOMAIN_SEP);
         Ok(*hasher_to_field
@@ -409,8 +413,6 @@ where
             .ok_or_else(|| anyhow!("hash_to_field output is empty"))?)
     }
 }
-
-const HASH_TO_FIELD_DOMAIN_SEP: &[u8; 4] = b"rick";
 
 // `From` impls for `VidError`
 //
