@@ -1,4 +1,4 @@
-use hotshot_primitives::vid::advz::Advz;
+use hotshot_primitives::vid::advz::GenericAdvz;
 
 use ark_bls12_381::Bls12_381;
 use ark_ec::pairing::Pairing;
@@ -29,7 +29,7 @@ fn round_trip() {
 
     vid::round_trip(
         |payload_chunk_size, num_storage_nodes| {
-            Advz::<Pcs, G, H, V>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap()
+            GenericAdvz::<Pcs, G, H, V>::new(payload_chunk_size, num_storage_nodes, &srs).unwrap()
         },
         &mut rng,
     );

@@ -39,7 +39,7 @@ use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 /// Generic parameters `T`, `H` are needed only to express trait bounds in the impl for [`VidScheme`].
 /// - `H` is a hasher.
 /// - `T` is a group.
-pub struct Advz<P, T, H, V>
+pub struct GenericAdvz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -52,7 +52,7 @@ where
     _phantom_v: PhantomData<V>, // needed for trait bounds
 }
 
-impl<P, T, H, V> Advz<P, T, H, V>
+impl<P, T, H, V> GenericAdvz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme,
 {
@@ -119,7 +119,7 @@ where
 // 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
 // 5: `H` is a hasher
 // TODO switch to `UnivariatePCS` after <https://github.com/EspressoSystems/jellyfish/pull/231>
-impl<P, T, H, V> VidScheme for Advz<P, T, H, V>
+impl<P, T, H, V> VidScheme for GenericAdvz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
@@ -216,7 +216,7 @@ where
     }
 }
 
-impl<P, T, H, V> Advz<P, T, H, V>
+impl<P, T, H, V> GenericAdvz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
@@ -636,11 +636,12 @@ mod tests {
     /// Returns the following tuple:
     /// 1. An initialized [`Advz`] instance.
     /// 2. A `Vec<u8>` filled with random bytes.
-    fn avdz_init() -> (Advz<Pcs, G, H, V>, Vec<u8>) {
+    fn avdz_init() -> (GenericAdvz<Pcs, G, H, V>, Vec<u8>) {
         let (payload_chunk_size, num_storage_nodes) = (3, 5);
         let mut rng = jf_utils::test_rng();
         let srs = Pcs::gen_srs_for_testing(&mut rng, payload_chunk_size).unwrap();
-        let advz = Advz::<Pcs, G, H, V>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
+        let advz =
+            GenericAdvz::<Pcs, G, H, V>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
         let mut bytes_random = vec![0u8; 4000];
         rng.fill_bytes(&mut bytes_random);
