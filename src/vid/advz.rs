@@ -247,7 +247,7 @@ where
         let all_evals = {
             let mut all_evals = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
 
-            // TODO use fk23
+            // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/38
             for poly in polys.iter() {
                 for (index, evals) in all_evals.iter_mut().enumerate() {
                     evals.push(poly.evaluate(&Self::index_to_point(index)));
@@ -300,7 +300,7 @@ where
             polynomial_eval(polys.iter().map(PolynomialMultiplier), pseudorandom_scalar);
 
         // aggregate proofs
-        // TODO use fk23
+        // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/38
         let aggregate_proofs: Vec<P::Proof> = (0..self.num_storage_nodes)
             .map(|index| {
                 P::open(&self.ck, &aggregate_poly, &Self::index_to_point(index)).map(|ok| ok.0)
@@ -364,6 +364,7 @@ where
         let result_len = num_polys * self.payload_chunk_size;
         let mut result = Vec::with_capacity(result_len);
         for i in 0..num_polys {
+            // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/38
             let mut coeffs = ReedSolomonErasureCode::decode(
                 shares.iter().map(|s| ReedSolomonErasureCodeShare {
                     index: s.index + 1, // 1-based index for ReedSolomonErasureCodeShare
