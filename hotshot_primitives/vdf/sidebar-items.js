@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"trait":["VDF"]};
+window.SIDEBAR_ITEMS = {"mod":["minroot"],"trait":["VDF"]};
