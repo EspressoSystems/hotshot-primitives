@@ -4,7 +4,7 @@
 
 use super::{VidError, VidResult, VidScheme};
 use anyhow::anyhow;
-use ark_ec::AffineRepr;
+use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{
     fields::field_hashers::{DefaultFieldHasher, HashToField},
     Field,
@@ -28,17 +28,28 @@ use jf_primitives::{
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
-    merkle_tree::{MerkleCommitment, MerkleTreeScheme},
-    pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
+    merkle_tree::{hasher::HasherMerkleTree, MerkleCommitment, MerkleTreeScheme},
+    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString},
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
 
-/// Context data for the ADVZ VID scheme.
+/// The [ADVZ VID scheme](https://eprint.iacr.org/2021/1500), a concrete impl for [`VidScheme`].
 ///
-/// This struct is a concrete impl for [`VidScheme`].
-/// Generic parameters `T`, `H` are needed only to express trait bounds in the impl for [`VidScheme`].
-/// - `H` is a hasher.
-/// - `T` is a group.
+/// - `H` is any [`Digest`]-compatible hash function
+/// - `E` is any [`Pairing`]
+pub type Advz<E, H> = GenericAdvz<
+    UnivariateKzgPCS<E>,
+    <E as Pairing>::G1Affine,
+    H,
+    HasherMerkleTree<H, Vec<<UnivariateKzgPCS<E> as PolynomialCommitmentScheme>::Evaluation>>,
+>;
+
+/// Like [`Advz`] except with more abstraction.
+///
+/// - `P` is a [`PolynomialCommitmentScheme`]
+/// - `T` is the group type underlying [`PolynomialCommitmentScheme::Commitment`]
+/// - `H` is a [`Digest`]-compatible hash function.
+/// - `V` is a [`MerkleTreeScheme`], though any vector commitment would suffice
 pub struct GenericAdvz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme,
@@ -85,8 +96,6 @@ where
 }
 
 /// The [`VidScheme::StorageShare`] type for [`Advz`].
-// Can't use `[#derive]` for `Share<P>` due to https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
-// Workaround: use `[#derivative]`
 #[derive(Derivative)]
 #[derivative(Clone, Debug)]
 pub struct Share<P, V>
@@ -118,7 +127,6 @@ where
 // 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
 // 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
 // 5: `H` is a hasher
-// TODO switch to `UnivariatePCS` after <https://github.com/EspressoSystems/jellyfish/pull/231>
 impl<P, T, H, V> VidScheme for GenericAdvz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
@@ -502,18 +510,8 @@ mod tests {
     use super::{VidError::Argument, *};
 
     use ark_bls12_381::Bls12_381;
-    use ark_ec::pairing::Pairing;
     use ark_std::{rand::RngCore, vec};
-    use jf_primitives::{
-        merkle_tree::hasher::HasherMerkleTree,
-        pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme},
-    };
     use sha2::Sha256;
-
-    type Pcs = UnivariateKzgPCS<Bls12_381>;
-    type G = <Bls12_381 as Pairing>::G1Affine;
-    type H = Sha256;
-    type V = HasherMerkleTree<H, Vec<<Pcs as PolynomialCommitmentScheme>::Evaluation>>; // TODO: should be automatic, Vec<_> is an impl detail!
 
     #[test]
     fn sad_path_verify_share_corrupt_share() {
@@ -567,7 +565,7 @@ mod tests {
         // 1 corrupt commit
         let common_1_corruption = {
             let mut corrupted = common;
-            corrupted.poly_commits[0] = G::zero().into();
+            corrupted.poly_commits[0] = <Bls12_381 as Pairing>::G1Affine::zero().into();
             corrupted
         };
         advz.verify_share(&shares[0], &common_1_corruption)
@@ -636,12 +634,12 @@ mod tests {
     /// Returns the following tuple:
     /// 1. An initialized [`Advz`] instance.
     /// 2. A `Vec<u8>` filled with random bytes.
-    fn avdz_init() -> (GenericAdvz<Pcs, G, H, V>, Vec<u8>) {
+    fn avdz_init() -> (Advz<Bls12_381, Sha256>, Vec<u8>) {
         let (payload_chunk_size, num_storage_nodes) = (3, 5);
         let mut rng = jf_utils::test_rng();
-        let srs = Pcs::gen_srs_for_testing(&mut rng, payload_chunk_size).unwrap();
-        let advz =
-            GenericAdvz::<Pcs, G, H, V>::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
+        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(&mut rng, payload_chunk_size)
+            .unwrap();
+        let advz = Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
         let mut bytes_random = vec![0u8; 4000];
         rng.fill_bytes(&mut bytes_random);
