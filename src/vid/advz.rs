@@ -521,6 +521,7 @@ mod tests {
 
     use ark_bls12_381::Bls12_381;
     use ark_std::{rand::RngCore, vec};
+    use jf_primitives::merkle_tree::hasher::HasherNode;
     use sha2::Sha256;
 
     #[test]
@@ -572,15 +573,33 @@ mod tests {
             "1 missing commit should be arg error",
         );
 
-        // 1 corrupt commit
-        let common_1_corruption = {
-            let mut corrupted = common;
+        // 1 corrupt commit, poly_commit
+        let common_1_poly_corruption = {
+            let mut corrupted = common.clone();
             corrupted.poly_commits[0] = <Bls12_381 as Pairing>::G1Affine::zero().into();
             corrupted
         };
-        advz.verify_share(&shares[0], &common_1_corruption)
+        advz.verify_share(&shares[0], &common_1_poly_corruption)
             .unwrap()
-            .expect_err("1 corrupt commit should fail verification");
+            .expect_err("1 corrupt poly_commit should fail verification");
+
+        // 1 corrupt commit, all_evals_digest
+        let common_1_digest_corruption = {
+            let mut corrupted = common;
+            let mut digest_bytes = vec![0u8; corrupted.all_evals_digest.uncompressed_size()];
+            corrupted
+                .all_evals_digest
+                .serialize_uncompressed(&mut digest_bytes)
+                .expect("digest serialization should succeed");
+            digest_bytes[0] += 1;
+            corrupted.all_evals_digest =
+                HasherNode::deserialize_uncompressed(digest_bytes.as_slice())
+                    .expect("digest deserialization should succeed");
+            corrupted
+        };
+        advz.verify_share(&shares[0], &common_1_digest_corruption)
+            .unwrap()
+            .expect_err("1 corrupt all_evals_digest should fail verification");
     }
 
     #[test]
