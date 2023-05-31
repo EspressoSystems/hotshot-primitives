@@ -14,9 +14,11 @@ ark-bls12-381 = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-ec = "0.4.0"
 ark-ff = "0.4.0"
+ark-pallas = "0.4.0"
 ark-poly = "0.4.0"
 ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
+bincode = { version = "1.1.3" }
 bitvec = { version = "1.0.1", default-features = false, features = ["alloc", "atomic", "serde"] }
 derivative = "2.2.0"
 digest = { version = "0.10" }
@@ -34,9 +36,14 @@ typenum = { version = "1.16.0", no_sstd = true }
 
 [dev-dependencies]
 jf-primitives = { git = "https://github.com/espressosystems/jellyfish", branch = "binyi-snark-qc", features = ["test-srs"] } # , tag = "0.3.0"
+criterion = "0.5.0"
 sha2 = { version = "0.10" }
+
+[[bench]]
+name = "minroot"
+harness = false
 
 [features]
 default = ["parallel"]
-std = ["ark-std/std"]
-parallel = ["jf-primitives/parallel"]
+std = ["ark-std/std", "ark-serialize/std", "ark-pallas/std", "ark-ff/std"]
+parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]

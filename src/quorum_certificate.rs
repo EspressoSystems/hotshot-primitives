@@ -1,3 +1,4 @@
+use ark_std::fmt::Debug;
 use bitvec::prelude::*;
 use core::marker::PhantomData;
 use typenum::U32;
@@ -13,20 +14,24 @@ use generic_array::{ArrayLength, GenericArray};
 use jf_primitives::errors::PrimitivesError;
 use jf_primitives::errors::PrimitivesError::ParameterError;
 use jf_primitives::signatures::AggregateableSignatureSchemes;
+use serde::{Deserialize, Serialize};
 
 /// Trait for validating a QC built from different signatures on the same message
-pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
+pub trait QuorumCertificateValidation<
+    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
+>
+{
     /// Public parameters for generating the QC
     /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.
-    type QCProverParams;
+    type QCProverParams: Serialize + for<'a> Deserialize<'a>;
 
     /// Public parameters for validating the QC
     /// E.g: verifying keys, stake table commitment
-    type QCVerifierParams;
+    type QCVerifierParams: Serialize + for<'a> Deserialize<'a>;
 
     /// Extra value to check the aggregated signature of the QC
     /// E.g: snark proof, bitmap corresponding to the public keys involved in signing
-    type Proof;
+    type Proof: Serialize + for<'a> Deserialize<'a>;
 
     /// Allows to fix the size of the message at compilation time.
     type MessageLength: ArrayLength<A::MessageUnit>;
@@ -35,6 +40,7 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     type CheckedType;
 
     /// Produces a partial signature on a message with a single user signing key
+    /// NOTE: the original message (vote) should be prefixed with the hash of the stake table.
     /// * `agg_sig_pp` - public parameters for aggregate signature
     /// * `message` - message to be signed
     /// * `signing_keys` - user signing key
@@ -73,32 +79,32 @@ pub trait QuorumCertificateValidation<A: AggregateableSignatureSchemes> {
     ) -> Result<Self::CheckedType, PrimitivesError>;
 }
 
-// TODO: add CanonicalSerialize/Deserialize
-pub struct BitvectorQuorumCertificate<A: AggregateableSignatureSchemes>(PhantomData<A>);
+#[derive(Serialize, Deserialize)]
+pub struct BitvectorQuorumCertificate<
+    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
+>(PhantomData<A>);
 
-pub struct StakeTableEntry<A: AggregateableSignatureSchemes> {
-    pub stake_key: A::VerificationKey,
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct StakeTableEntry<V> {
+    pub stake_key: V,
     pub stake_amount: U256,
 }
 
-pub struct StakeTableDigest<A: AggregateableSignatureSchemes>(Vec<A::MessageUnit>);
-
-// TODO: refactor
-pub struct QCParams<A: AggregateableSignatureSchemes> {
-    pub stake_table_digest: StakeTableDigest<A>,
-    pub stake_entries: Vec<StakeTableEntry<A>>,
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct QCParams<V, P> {
+    pub stake_entries: Vec<StakeTableEntry<V>>,
     pub threshold: U256,
-    pub agg_sig_pp: A::PublicParameter,
+    pub agg_sig_pp: P,
 }
 
 impl<A> QuorumCertificateValidation<A> for BitvectorQuorumCertificate<A>
 where
-    A: AggregateableSignatureSchemes,
+    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
 {
-    type QCProverParams = QCParams<A>;
+    type QCProverParams = QCParams<A::VerificationKey, A::PublicParameter>;
 
     // TODO: later with SNARKs we'll use a smaller verifier parameter
-    type QCVerifierParams = QCParams<A>;
+    type QCVerifierParams = QCParams<A::VerificationKey, A::PublicParameter>;
 
     type Proof = BitVec;
     type MessageLength = U32;
@@ -213,20 +219,19 @@ mod tests {
             let key_pair1 = KeyPair::generate(&mut rng);
             let key_pair2 = KeyPair::generate(&mut rng);
             let key_pair3 = KeyPair::generate(&mut rng);
-            let entry1 = StakeTableEntry::<$aggsig> {
+            let entry1 = StakeTableEntry {
                 stake_key: key_pair1.ver_key(),
                 stake_amount: U256::from(3u8),
             };
-            let entry2 = StakeTableEntry::<$aggsig> {
+            let entry2 = StakeTableEntry {
                 stake_key: key_pair2.ver_key(),
                 stake_amount: U256::from(5u8),
             };
-            let entry3 = StakeTableEntry::<$aggsig> {
+            let entry3 = StakeTableEntry {
                 stake_key: key_pair3.ver_key(),
                 stake_amount: U256::from(7u8),
             };
-            let qc_pp = QCParams::<$aggsig> {
-                stake_table_digest: StakeTableDigest::<$aggsig>(vec![12u8, 2u8, 7u8, 8u8]),
+            let qc_pp = QCParams {
                 stake_entries: vec![entry1, entry2, entry3],
                 threshold: U256::from(10u8),
                 agg_sig_pp,
@@ -269,6 +274,17 @@ mod tests {
                 &qc.1
             )
             .is_ok());
+
+            // Check the QC and the QCParams can be serialized / deserialized
+            assert_eq!(
+                qc,
+                bincode::deserialize(&bincode::serialize(&qc).unwrap()).unwrap()
+            );
+
+            assert_eq!(
+                qc_pp,
+                bincode::deserialize(&bincode::serialize(&qc_pp).unwrap()).unwrap()
+            );
 
             // bad paths
             // number of signatures unmatch
@@ -332,9 +348,4 @@ mod tests {
     fn test_quorum_certificate() {
         test_quorum_certificate!(BLSOverBN254CurveSignatureScheme);
     }
-
-    // #[test]
-    // fn test_serde() {
-    //     // TODO
-    // }
 }
