@@ -31,7 +31,8 @@ use jf_primitives::{
     merkle_tree::{hasher::HasherMerkleTree, MerkleCommitment, MerkleTreeScheme},
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString},
 };
-use jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
+use jf_utils::{bytes_from_field_elements, bytes_to_field_elements, canonical};
+use serde::{Deserialize, Serialize};
 
 /// The [ADVZ VID scheme](https://eprint.iacr.org/2021/1500), a concrete impl for [`VidScheme`].
 ///
@@ -50,6 +51,8 @@ pub type Advz<E, H> = GenericAdvz<
 /// - `T` is the group type underlying [`PolynomialCommitmentScheme::Commitment`]
 /// - `H` is a [`Digest`]-compatible hash function.
 /// - `V` is a [`MerkleTreeScheme`], though any vector commitment would suffice
+// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+// #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct GenericAdvz<P, T, H, V>
 where
     P: PolynomialCommitmentScheme,
@@ -96,7 +99,9 @@ where
 }
 
 /// The [`VidScheme::StorageShare`] type for [`Advz`].
-#[derive(Derivative)]
+#[derive(Derivative, Deserialize, Serialize)]
+// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+// #[derivative(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[derivative(Clone, Debug)]
 pub struct Share<P, V>
 where
@@ -105,24 +110,29 @@ where
     V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
 {
     index: usize,
+    #[serde(with = "canonical")]
     evals: Vec<P::Evaluation>,
+    #[serde(with = "canonical")]
     aggregate_proof: P::Proof,
     evals_proof: V::MembershipProof,
 }
 
 /// The [`VidScheme::StorageCommon`] type for [`Advz`].
-#[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
-#[derivative(Clone, Eq, PartialEq)]
-// #[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Derivative, Deserialize, Serialize)]
+// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+// #[derivative(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derivative(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Common<P, V>
 where
     P: PolynomialCommitmentScheme,
     V: MerkleTreeScheme,
 {
+    #[serde(with = "canonical")]
     poly_commits: Vec<P::Commitment>,
     all_evals_digest: V::NodeValue,
 }
 
+// We take great pains to maintain abstraction by relying only on traits and not concrete impls of those traits.
 // Explanation of trait bounds:
 // 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation').
 // 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
