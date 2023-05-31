@@ -529,32 +529,52 @@ mod tests {
         let (advz, bytes_random) = avdz_init();
         let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
 
-        for share in shares {
+        for (i, share) in shares.iter().enumerate() {
             // missing share eval
-            let share_missing_eval = Share {
-                evals: share.evals[1..].to_vec(),
-                ..share.clone()
-            };
-            assert_arg_err(
-                advz.verify_share(&share_missing_eval, &common),
-                "1 missing share should be arg error",
-            );
+            {
+                let share_missing_eval = Share {
+                    evals: share.evals[1..].to_vec(),
+                    ..share.clone()
+                };
+                assert_arg_err(
+                    advz.verify_share(&share_missing_eval, &common),
+                    "1 missing share should be arg error",
+                );
+            }
 
             // corrupted share eval
-            let mut share_bad_eval = share.clone();
-            share_bad_eval.evals[0].double_in_place();
-            advz.verify_share(&share_bad_eval, &common)
-                .unwrap()
-                .expect_err("bad share value should fail verification");
+            {
+                let mut share_bad_eval = share.clone();
+                share_bad_eval.evals[0].double_in_place();
+                advz.verify_share(&share_bad_eval, &common)
+                    .unwrap()
+                    .expect_err("bad share value should fail verification");
+            }
 
             // corrupted index
-            let share_bad_index = Share {
-                index: share.index + 5,
-                ..share.clone()
-            };
-            advz.verify_share(&share_bad_index, &common)
-                .unwrap()
-                .expect_err("bad share index should fail verification");
+            {
+                let share_bad_index = Share {
+                    index: share.index + 5,
+                    ..share.clone()
+                };
+                advz.verify_share(&share_bad_index, &common)
+                    .unwrap()
+                    .expect_err("bad share index should fail verification");
+            }
+
+            // corrupt eval proof
+            {
+                // We have no way to corrupt a proof
+                // (without also causing a deserialization failure).
+                // So we use another share's proof instead.
+                let share_bad_evals_proof = Share {
+                    evals_proof: shares[i + 1 % shares.len()].evals_proof.clone(),
+                    ..share.clone()
+                };
+                advz.verify_share(&share_bad_evals_proof, &common)
+                    .unwrap()
+                    .expect_err("bad share evals proof should fail verification");
+            }
         }
     }
 
@@ -630,29 +650,31 @@ mod tests {
         let (advz, bytes_random) = avdz_init();
         let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
 
-        // unequal share eval lengths
-        let mut shares_missing_evals = shares.clone();
-        for i in 0..shares_missing_evals.len() - 1 {
-            shares_missing_evals[i].evals.pop();
-            assert_arg_err(
-                advz.recover_payload(&shares_missing_evals, &common),
-                format!("{} shares missing 1 eval should be arg error", i + 1).as_str(),
-            );
-        }
+        {
+            // unequal share eval lengths
+            let mut shares_missing_evals = shares.clone();
+            for i in 0..shares_missing_evals.len() - 1 {
+                shares_missing_evals[i].evals.pop();
+                assert_arg_err(
+                    advz.recover_payload(&shares_missing_evals, &common),
+                    format!("{} shares missing 1 eval should be arg error", i + 1).as_str(),
+                );
+            }
 
-        // 1 eval missing from all shares
-        shares_missing_evals.last_mut().unwrap().evals.pop();
-        let bytes_recovered = advz
-            .recover_payload(&shares_missing_evals, &common)
-            .expect("recover_payload should succeed when shares have equal eval lengths");
-        assert_ne!(bytes_recovered, bytes_random);
-
-        // corrupt indices
-        let mut shares_bad_indices = shares; // shares.clone()
-        for share in &mut shares_bad_indices {
-            share.index += 5;
+            // 1 eval missing from all shares
+            shares_missing_evals.last_mut().unwrap().evals.pop();
             let bytes_recovered = advz
                 .recover_payload(&shares_missing_evals, &common)
+                .expect("recover_payload should succeed when shares have equal eval lengths");
+            assert_ne!(bytes_recovered, bytes_random);
+        }
+
+        // corrupt indices
+        let mut shares_bad_indices = shares.clone();
+        for i in 0..shares_bad_indices.len() {
+            shares_bad_indices[i].index += 5;
+            let bytes_recovered = advz
+                .recover_payload(&shares_bad_indices, &common)
                 .expect("recover_payload should succeed for any share indices");
             assert_ne!(bytes_recovered, bytes_random);
         }
