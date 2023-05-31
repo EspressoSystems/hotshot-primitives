@@ -1,6 +1,13 @@
 {
   description = "Jellyfish dev env";
 
+  nixConfig = {
+    extra-substituters = [ "https://espresso-systems-private.cachix.org" ];
+    extra-trusted-public-keys = [
+      "espresso-systems-private.cachix.org-1:LHYk03zKQCeZ4dvg3NctyCq88e44oBZVug5LpYKjPRI="
+    ];
+  };
+
   inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils"; # for dedup
 
