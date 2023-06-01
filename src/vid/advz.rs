@@ -676,7 +676,7 @@ mod tests {
         }
 
         // corrupt indices
-        let mut shares_bad_indices = shares.clone();
+        let mut shares_bad_indices = shares;
         for i in 0..shares_bad_indices.len() {
             shares_bad_indices[i].index += 5;
             let bytes_recovered = advz
