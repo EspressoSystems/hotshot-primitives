@@ -188,7 +188,13 @@ where
         }
 
         // verify eval proof
-        if V::verify(common.all_evals_digest, &share.evals_proof)?.is_err() {
+        if V::verify(
+            common.all_evals_digest,
+            &V::Index::from(share.index as u64),
+            &share.evals_proof,
+        )?
+        .is_err()
+        {
             return Ok(Err(()));
         }
 
@@ -568,7 +574,7 @@ mod tests {
                 // (without also causing a deserialization failure).
                 // So we use another share's proof instead.
                 let share_bad_evals_proof = Share {
-                    evals_proof: shares[i + 1 % shares.len()].evals_proof.clone(),
+                    evals_proof: shares[(i + 1) % shares.len()].evals_proof.clone(),
                     ..share.clone()
                 };
                 advz.verify_share(&share_bad_evals_proof, &common)
