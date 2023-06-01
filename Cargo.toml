@@ -42,6 +42,10 @@ sha2 = { version = "0.10" }
 name = "minroot"
 harness = false
 
+[[bench]]
+name = "advz"
+harness = false
+
 [features]
 default = ["parallel"]
 std = ["ark-std/std", "ark-serialize/std", "ark-pallas/std", "ark-ff/std"]
