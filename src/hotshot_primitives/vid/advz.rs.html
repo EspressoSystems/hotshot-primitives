@@ -602,13 +602,120 @@
 <a href="#602" id="602">602</a>
 <a href="#603" id="603">603</a>
 <a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
+<a href="#625" id="625">625</a>
+<a href="#626" id="626">626</a>
+<a href="#627" id="627">627</a>
+<a href="#628" id="628">628</a>
+<a href="#629" id="629">629</a>
+<a href="#630" id="630">630</a>
+<a href="#631" id="631">631</a>
+<a href="#632" id="632">632</a>
+<a href="#633" id="633">633</a>
+<a href="#634" id="634">634</a>
+<a href="#635" id="635">635</a>
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a>
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a>
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+<a href="#691" id="691">691</a>
+<a href="#692" id="692">692</a>
+<a href="#693" id="693">693</a>
+<a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
 </pre><pre class="rust"><code><span class="doccomment">//! Implementation of Verifiable Information Dispersal (VID) from &lt;https://eprint.iacr.org/2021/1500&gt;.
 //!
 //! `advz` named for the authors Alhaddad-Duan-Varia-Zhang.
 
 </span><span class="kw">use super</span>::{VidError, VidResult, VidScheme};
 <span class="kw">use </span>anyhow::anyhow;
-<span class="kw">use </span>ark_ec::AffineRepr;
+<span class="kw">use </span>ark_ec::{pairing::Pairing, AffineRepr};
 <span class="kw">use </span>ark_ff::{
     fields::field_hashers::{DefaultFieldHasher, HashToField},
     Field,
@@ -617,6 +724,7 @@
 <span class="kw">use </span>ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Write};
 <span class="kw">use </span>ark_std::{
     borrow::Borrow,
+    fmt::Debug,
     format,
     marker::PhantomData,
     ops::{Add, Mul},
@@ -631,17 +739,32 @@
         reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
         ErasureCode,
     },
-    pcs::{PolynomialCommitmentScheme, StructuredReferenceString},
+    merkle_tree::{hasher::HasherMerkleTree, MerkleCommitment, MerkleTreeScheme},
+    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString},
 };
-<span class="kw">use </span>jf_utils::{bytes_from_field_elements, bytes_to_field_elements};
+<span class="kw">use </span>jf_utils::{bytes_from_field_elements, bytes_to_field_elements, canonical};
+<span class="kw">use </span>serde::{Deserialize, Serialize};
 
-<span class="doccomment">/// Context data for the ADVZ VID scheme.
+<span class="doccomment">/// The [ADVZ VID scheme](https://eprint.iacr.org/2021/1500), a concrete impl for [`VidScheme`].
 ///
-/// This struct is a concrete impl for [`VidScheme`].
-/// Generic parameters `T`, `H` are needed only to express trait bounds in the impl for [`VidScheme`].
-/// - `H` is a hasher.
-/// - `T` is a group.
-</span><span class="kw">pub struct </span>Advz&lt;P, T, H&gt;
+/// - `H` is any [`Digest`]-compatible hash function
+/// - `E` is any [`Pairing`]
+</span><span class="kw">pub type </span>Advz&lt;E, H&gt; = GenericAdvz&lt;
+    UnivariateKzgPCS&lt;E&gt;,
+    &lt;E <span class="kw">as </span>Pairing&gt;::G1Affine,
+    H,
+    HasherMerkleTree&lt;H, Vec&lt;&lt;UnivariateKzgPCS&lt;E&gt; <span class="kw">as </span>PolynomialCommitmentScheme&gt;::Evaluation&gt;&gt;,
+&gt;;
+
+<span class="doccomment">/// Like [`Advz`] except with more abstraction.
+///
+/// - `P` is a [`PolynomialCommitmentScheme`]
+/// - `T` is the group type underlying [`PolynomialCommitmentScheme::Commitment`]
+/// - `H` is a [`Digest`]-compatible hash function.
+/// - `V` is a [`MerkleTreeScheme`], though any vector commitment would suffice
+</span><span class="comment">// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+// #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+</span><span class="kw">pub struct </span>GenericAdvz&lt;P, T, H, V&gt;
 <span class="kw">where
     </span>P: PolynomialCommitmentScheme,
 {
@@ -651,9 +774,10 @@
     vk: &lt;P::SRS <span class="kw">as </span>StructuredReferenceString&gt;::VerifierParam,
     _phantom_t: PhantomData&lt;T&gt;, <span class="comment">// needed for trait bounds
     </span>_phantom_h: PhantomData&lt;H&gt;, <span class="comment">// needed for trait bounds
+    </span>_phantom_v: PhantomData&lt;V&gt;, <span class="comment">// needed for trait bounds
 </span>}
 
-<span class="kw">impl</span>&lt;P, T, H&gt; Advz&lt;P, T, H&gt;
+<span class="kw">impl</span>&lt;P, T, H, V&gt; GenericAdvz&lt;P, T, H, V&gt;
 <span class="kw">where
     </span>P: PolynomialCommitmentScheme,
 {
@@ -680,40 +804,64 @@
             vk,
             _phantom_t: PhantomData,
             _phantom_h: PhantomData,
+            _phantom_v: PhantomData,
         })
     }
 }
 
 <span class="doccomment">/// The [`VidScheme::StorageShare`] type for [`Advz`].
-</span><span class="comment">// Can&#39;t use `[#derive]` for `Share&lt;P&gt;` due to https://github.com/rust-lang/rust/issues/26925#issuecomment-1528025201
-// Workaround: use `[#derivative]`
-</span><span class="attr">#[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
-#[derivative(Clone, Debug, Eq, PartialEq)]
-</span><span class="kw">pub struct </span>Share&lt;P&gt;
+</span><span class="attr">#[derive(Derivative, Deserialize, Serialize)]
+</span><span class="comment">// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+// #[derivative(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+</span><span class="attr">#[derivative(Clone, Debug)]
+</span><span class="kw">pub struct </span>Share&lt;P, V&gt;
 <span class="kw">where
     </span>P: PolynomialCommitmentScheme,
-{
+    V: MerkleTreeScheme,
+    V::MembershipProof: Sync + Debug, <span class="comment">// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+</span>{
     index: usize,
-    evals: Vec&lt;P::Evaluation&gt;,
-    aggregate_proof: P::Proof,
+    <span class="attr">#[serde(with = <span class="string">&quot;canonical&quot;</span>)]
+    </span>evals: Vec&lt;P::Evaluation&gt;,
+    <span class="attr">#[serde(with = <span class="string">&quot;canonical&quot;</span>)]
+    </span>aggregate_proof: P::Proof,
+    evals_proof: V::MembershipProof,
 }
 
-<span class="comment">// Explanation of trait bounds:
+<span class="doccomment">/// The [`VidScheme::StorageCommon`] type for [`Advz`].
+</span><span class="attr">#[derive(CanonicalSerialize, CanonicalDeserialize, Derivative, Deserialize, Serialize)]
+</span><span class="comment">// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+// #[derivative(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+</span><span class="attr">#[derivative(Clone, Debug, Default, Eq, PartialEq)]
+</span><span class="kw">pub struct </span>Common&lt;P, V&gt;
+<span class="kw">where
+    </span>P: PolynomialCommitmentScheme,
+    V: MerkleTreeScheme,
+{
+    <span class="attr">#[serde(with = <span class="string">&quot;canonical&quot;</span>)]
+    </span>poly_commits: Vec&lt;P::Commitment&gt;,
+    all_evals_digest: V::NodeValue,
+}
+
+<span class="comment">// We take great pains to maintain abstraction by relying only on traits and not concrete impls of those traits.
+// Explanation of trait bounds:
 // 1,2: `Polynomial` is univariate: domain (`Point`) same field as range (`Evaluation&#39;).
 // 3,4: `Commitment` is (convertible to/from) an elliptic curve group in affine form.
 // 5: `H` is a hasher
-// TODO switch to `UnivariatePCS` after &lt;https://github.com/EspressoSystems/jellyfish/pull/231&gt;
-</span><span class="kw">impl</span>&lt;P, T, H&gt; VidScheme <span class="kw">for </span>Advz&lt;P, T, H&gt;
+</span><span class="kw">impl</span>&lt;P, T, H, V&gt; VidScheme <span class="kw">for </span>GenericAdvz&lt;P, T, H, V&gt;
 <span class="kw">where
     </span>P: PolynomialCommitmentScheme&lt;Point = &lt;P <span class="kw">as </span>PolynomialCommitmentScheme&gt;::Evaluation&gt;, <span class="comment">// 1
     </span>P::Polynomial: DenseUVPolynomial&lt;P::Evaluation&gt;,                                      <span class="comment">// 2
     </span>P::Commitment: From&lt;T&gt; + AsRef&lt;T&gt;,                                                    <span class="comment">// 3
     </span>T: AffineRepr&lt;ScalarField = P::Evaluation&gt;,                                           <span class="comment">// 4
     </span>H: Digest + DynDigest + Default + Clone + Write,                                      <span class="comment">// 5
-</span>{
+    </span>V: MerkleTreeScheme&lt;Element = Vec&lt;P::Evaluation&gt;&gt;,
+    V::MembershipProof: Sync + Debug, <span class="comment">// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+    </span>V::Index: From&lt;u64&gt;,
+{
     <span class="kw">type </span>Commitment = Output&lt;H&gt;;
-    <span class="kw">type </span>StorageShare = Share&lt;P&gt;;
-    <span class="kw">type </span>StorageCommon = Vec&lt;P::Commitment&gt;;
+    <span class="kw">type </span>StorageShare = Share&lt;P, V&gt;;
+    <span class="kw">type </span>StorageCommon = Common&lt;P, V&gt;;
 
     <span class="kw">fn </span>commit(<span class="kw-2">&amp;</span><span class="self">self</span>, payload: <span class="kw-2">&amp;</span>[u8]) -&gt; VidResult&lt;<span class="self">Self</span>::Commitment&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>hasher = H::new();
@@ -742,53 +890,50 @@
         share: <span class="kw-2">&amp;</span><span class="self">Self</span>::StorageShare,
         common: <span class="kw-2">&amp;</span><span class="self">Self</span>::StorageCommon,
     ) -&gt; VidResult&lt;<span class="prelude-ty">Result</span>&lt;(), ()&gt;&gt; {
-        <span class="kw">if </span>share.evals.len() != common.len() {
+        <span class="kw">if </span>share.evals.len() != common.poly_commits.len() {
             <span class="kw">return </span><span class="prelude-val">Err</span>(VidError::Argument(<span class="macro">format!</span>(
-                <span class="string">&quot;(share eval, common) lengths differ ({},{})&quot;</span>,
+                <span class="string">&quot;(share eval, common poly commit) lengths differ ({},{})&quot;</span>,
                 share.evals.len(),
-                common.len()
+                common.poly_commits.len()
             )));
         }
 
-        <span class="comment">// compute payload commitment from polynomial commitments
-        </span><span class="kw">let </span>payload_commitment = {
-            <span class="kw">let </span><span class="kw-2">mut </span>hasher = H::new();
-            <span class="kw">for </span>comm <span class="kw">in </span>common.iter() {
-                comm.serialize_uncompressed(<span class="kw-2">&amp;mut </span>hasher)<span class="question-mark">?</span>;
-            }
-            hasher.finalize()
-        };
+        <span class="comment">// verify eval proof
+        </span><span class="kw">if </span>V::verify(
+            common.all_evals_digest,
+            <span class="kw-2">&amp;</span>V::Index::from(share.index <span class="kw">as </span>u64),
+            <span class="kw-2">&amp;</span>share.evals_proof,
+        )<span class="question-mark">?
+        </span>.is_err()
+        {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(()));
+        }
 
-        <span class="comment">// compute my pseudorandom scalar
-        </span><span class="kw">let </span>scalar: P::Evaluation = {
-            <span class="kw">let </span><span class="kw-2">mut </span>hasher = H::new().chain_update(payload_commitment);
-            <span class="kw">let </span>hasher_to_field = &lt;DefaultFieldHasher&lt;H&gt; <span class="kw">as </span>HashToField&lt;P::Evaluation&gt;&gt;::new(
-                HASH_TO_FIELD_DOMAIN_SEP,
-            );
-            <span class="kw">for </span>eval <span class="kw">in </span>share.evals.iter() {
-                eval.serialize_uncompressed(<span class="kw-2">&amp;mut </span>hasher)<span class="question-mark">?</span>;
-            }
-            <span class="kw-2">*</span>hasher_to_field
-                .hash_to_field(<span class="kw-2">&amp;</span>hasher.finalize(), <span class="number">1</span>)
-                .first()
-                .ok_or_else(|| <span class="macro">anyhow!</span>(<span class="string">&quot;hash_to_field output is empty&quot;</span>))<span class="question-mark">?
-        </span>};
+        <span class="kw">let </span>pseudorandom_scalar = <span class="self">Self</span>::pseudorandom_scalar(common)<span class="question-mark">?</span>;
 
         <span class="comment">// Compute aggregate polynomial [commitment|evaluation]
         // as a pseudorandom linear combo of [commitments|evaluations]
         // via evaluation of the polynomial whose coefficients are [commitments|evaluations]
         // and whose input point is the pseudorandom scalar.
-        </span><span class="kw">let </span>aggregate_commit = P::Commitment::from(
-            polynomial_eval(common.iter().map(|x| CurveMultiplier(x.as_ref())), scalar).into(),
+        </span><span class="kw">let </span>aggregate_poly_commit = P::Commitment::from(
+            polynomial_eval(
+                common
+                    .poly_commits
+                    .iter()
+                    .map(|x| CurveMultiplier(x.as_ref())),
+                pseudorandom_scalar,
+            )
+            .into(),
         );
-        <span class="kw">let </span>aggregate_value = polynomial_eval(share.evals.iter().map(FieldMultiplier), scalar);
+        <span class="kw">let </span>aggregate_eval =
+            polynomial_eval(share.evals.iter().map(FieldMultiplier), pseudorandom_scalar);
 
         <span class="comment">// verify aggregate proof
         </span><span class="prelude-val">Ok</span>(P::verify(
             <span class="kw-2">&amp;</span><span class="self">self</span>.vk,
-            <span class="kw-2">&amp;</span>aggregate_commit,
+            <span class="kw-2">&amp;</span>aggregate_poly_commit,
             <span class="kw-2">&amp;</span><span class="self">Self</span>::index_to_point(share.index),
-            <span class="kw-2">&amp;</span>aggregate_value,
+            <span class="kw-2">&amp;</span>aggregate_eval,
             <span class="kw-2">&amp;</span>share.aggregate_proof,
         )<span class="question-mark">?
         </span>.then_some(())
@@ -806,13 +951,16 @@
     }
 }
 
-<span class="kw">impl</span>&lt;P, T, H&gt; Advz&lt;P, T, H&gt;
+<span class="kw">impl</span>&lt;P, T, H, V&gt; GenericAdvz&lt;P, T, H, V&gt;
 <span class="kw">where
     </span>P: PolynomialCommitmentScheme&lt;Point = &lt;P <span class="kw">as </span>PolynomialCommitmentScheme&gt;::Evaluation&gt;,
     P::Polynomial: DenseUVPolynomial&lt;P::Evaluation&gt;,
     P::Commitment: From&lt;T&gt; + AsRef&lt;T&gt;,
     T: AffineRepr&lt;ScalarField = P::Evaluation&gt;,
     H: Digest + DynDigest + Default + Clone + Write,
+    V: MerkleTreeScheme&lt;Element = Vec&lt;P::Evaluation&gt;&gt;,
+    V::MembershipProof: Sync + Debug, <span class="comment">// TODO https://github.com/EspressoSystems/jellyfish/issues/253
+    </span>V::Index: From&lt;u64&gt;,
 {
     <span class="doccomment">/// Same as [`VidScheme::dispersal_data`] except `payload` is a slice of field elements.
     </span><span class="kw">pub fn </span>dispersal_data_from_elems(
@@ -824,91 +972,94 @@
     )&gt; {
         <span class="kw">let </span>num_polys = (payload.len() - <span class="number">1</span>) / <span class="self">self</span>.payload_chunk_size + <span class="number">1</span>;
 
-        <span class="comment">// polys: partition payload into polynomial coefficients
-        // poly_commits: for result `common`
-        // storage_node_evals: evaluate polys at many points for erasure-coded result shares
-        // payload_commit: same as in Vid::commit
-        </span><span class="kw">let </span>(polys, poly_commits, storage_node_evals, payload_commit) = {
-            <span class="kw">let </span><span class="kw-2">mut </span>hasher = H::new();
-            <span class="kw">let </span><span class="kw-2">mut </span>polys = Vec::with_capacity(num_polys);
-            <span class="kw">let </span><span class="kw-2">mut </span>poly_commits = Vec::with_capacity(num_polys);
-            <span class="kw">let </span><span class="kw-2">mut </span>storage_node_evals =
-                <span class="macro">vec!</span>[Vec::with_capacity(num_polys); <span class="self">self</span>.num_storage_nodes];
-            <span class="kw">for </span>coeffs <span class="kw">in </span>payload.chunks(<span class="self">self</span>.payload_chunk_size) {
-                <span class="kw">let </span>poly = DenseUVPolynomial::from_coefficients_slice(coeffs);
-                <span class="kw">let </span>poly_commit = P::commit(<span class="kw-2">&amp;</span><span class="self">self</span>.ck, <span class="kw-2">&amp;</span>poly)<span class="question-mark">?</span>;
-                poly_commit.serialize_uncompressed(<span class="kw-2">&amp;mut </span>hasher)<span class="question-mark">?</span>;
+        <span class="comment">// partition payload into polynomial coefficients
+        </span><span class="kw">let </span>polys: Vec&lt;P::Polynomial&gt; = payload
+            .chunks(<span class="self">self</span>.payload_chunk_size)
+            .map(DenseUVPolynomial::from_coefficients_slice)
+            .collect();
 
-                <span class="comment">// TODO use batch_open_fk23
-                </span><span class="kw">for </span>(index, eval) <span class="kw">in </span>storage_node_evals.iter_mut().enumerate() {
-                    eval.push(poly.evaluate(<span class="kw-2">&amp;</span><span class="self">Self</span>::index_to_point(index)));
+        <span class="comment">// evaluate polynomials
+        </span><span class="kw">let </span>all_evals = {
+            <span class="kw">let </span><span class="kw-2">mut </span>all_evals = <span class="macro">vec!</span>[Vec::with_capacity(num_polys); <span class="self">self</span>.num_storage_nodes];
+
+            <span class="comment">// TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
+            </span><span class="kw">for </span>poly <span class="kw">in </span>polys.iter() {
+                <span class="kw">for </span>(index, evals) <span class="kw">in </span>all_evals.iter_mut().enumerate() {
+                    evals.push(poly.evaluate(<span class="kw-2">&amp;</span><span class="self">Self</span>::index_to_point(index)));
                 }
-
-                polys.push(poly);
-                poly_commits.push(poly_commit);
             }
 
             <span class="comment">// sanity checks
-            </span><span class="macro">assert_eq!</span>(polys.len(), num_polys);
-            <span class="macro">assert_eq!</span>(poly_commits.len(), num_polys);
-            <span class="macro">assert_eq!</span>(storage_node_evals.len(), <span class="self">self</span>.num_storage_nodes);
-            <span class="kw">for </span>v <span class="kw">in </span>storage_node_evals.iter() {
-                <span class="macro">assert_eq!</span>(v.len(), num_polys);
+            </span><span class="macro">assert_eq!</span>(all_evals.len(), <span class="self">self</span>.num_storage_nodes);
+            <span class="kw">for </span>evals <span class="kw">in </span>all_evals.iter() {
+                <span class="macro">assert_eq!</span>(evals.len(), num_polys);
             }
 
-            (polys, poly_commits, storage_node_evals, hasher.finalize())
+            all_evals
         };
 
-        <span class="comment">// storage_node_scalars[j]: hash(payload_commit, poly_evals(j))
-        //   used for pseudorandom linear combos as per hotshot paper.
-        //
-        // Notes on hash-to-field:
-        // - Can&#39;t use `Field::from_random_bytes` because it&#39;s fallible
-        //   (in what sense is it from &quot;random&quot; bytes?!)
-        // - `HashToField` does not expose an incremental API (ie. `update`)
-        //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
-        </span><span class="kw">let </span>hasher = H::new().chain_update(payload_commit);
-        <span class="kw">let </span>hasher_to_field =
-            &lt;DefaultFieldHasher&lt;H&gt; <span class="kw">as </span>HashToField&lt;P::Evaluation&gt;&gt;::new(HASH_TO_FIELD_DOMAIN_SEP);
-        <span class="kw">let </span>storage_node_scalars: Vec&lt;P::Evaluation&gt; = storage_node_evals
-            .iter()
-            .map(|evals| {
-                <span class="kw">let </span><span class="kw-2">mut </span>hasher = hasher.clone();
-                <span class="kw">for </span>eval <span class="kw">in </span>evals.iter() {
-                    eval.serialize_uncompressed(<span class="kw-2">&amp;mut </span>hasher)<span class="question-mark">?</span>;
-                }
-                <span class="prelude-val">Ok</span>(<span class="kw-2">*</span>(hasher_to_field
-                    .hash_to_field(<span class="kw-2">&amp;</span>hasher.finalize(), <span class="number">1</span>)
-                    .first()
-                    .ok_or_else(|| <span class="macro">anyhow!</span>(<span class="string">&quot;hash_to_field output is empty&quot;</span>))<span class="question-mark">?</span>))
-            })
-            .collect::&lt;<span class="prelude-ty">Result</span>&lt;<span class="kw">_</span>, anyhow::Error&gt;&gt;()<span class="question-mark">?</span>;
+        <span class="comment">// vector commitment to polynomial evaluations
+        // TODO why do I need to compute the height of the merkle tree?
+        </span><span class="kw">let </span>height: usize = all_evals
+            .len()
+            .checked_ilog(V::ARITY)
+            .ok_or_else(|| {
+                VidError::Argument(<span class="macro">format!</span>(
+                    <span class="string">&quot;num_storage_nodes {} log base {} invalid&quot;</span>,
+                    all_evals.len(),
+                    V::ARITY
+                ))
+            })<span class="question-mark">?
+            </span>.try_into()
+            .expect(<span class="string">&quot;num_storage_nodes log base arity should fit into usize&quot;</span>);
+        <span class="kw">let </span>height = height + <span class="number">1</span>; <span class="comment">// avoid fully qualified syntax for try_into()
+        </span><span class="kw">let </span>all_evals_commit = V::from_elems(height, <span class="kw-2">&amp;</span>all_evals)<span class="question-mark">?</span>;
 
-        <span class="comment">// For each storage node j as per hotshot paper:
-        // -  Compute aggregate polynomial
-        //    as a pseudorandom linear combo of payload polynomials
-        //    via evaluation of the polynomial whose coefficients are payload polynomials
-        //    and whose input point is the pseudorandom scalar.
-        // - Compute aggregate proof for the aggregate polynomial evaluated at j.
-        </span><span class="prelude-val">Ok</span>((
-            storage_node_scalars
+        <span class="comment">// common data
+        </span><span class="kw">let </span>common = Common {
+            poly_commits: polys
                 .iter()
-                .zip(storage_node_evals)
-                .enumerate()
-                .map(|(index, (scalar, evals))| {
-                    <span class="kw">let </span>aggregate_poly =
-                        polynomial_eval(polys.iter().map(PolynomialMultiplier), scalar);
-                    <span class="kw">let </span>(aggregate_proof, _value) =
-                        P::open(<span class="kw-2">&amp;</span><span class="self">self</span>.ck, <span class="kw-2">&amp;</span>aggregate_poly, <span class="kw-2">&amp;</span><span class="self">Self</span>::index_to_point(index))<span class="question-mark">?</span>;
-                    <span class="prelude-val">Ok</span>(Share {
-                        index,
-                        evals,
-                        aggregate_proof,
-                    })
+                .map(|poly| P::commit(<span class="kw-2">&amp;</span><span class="self">self</span>.ck, poly))
+                .collect::&lt;<span class="prelude-ty">Result</span>&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>,
+            all_evals_digest: all_evals_commit.commitment().digest(),
+        };
+
+        <span class="comment">// pseudorandom scalar
+        </span><span class="kw">let </span>pseudorandom_scalar = <span class="self">Self</span>::pseudorandom_scalar(<span class="kw-2">&amp;</span>common)<span class="question-mark">?</span>;
+
+        <span class="comment">// Compute aggregate polynomial
+        // as a pseudorandom linear combo of polynomials
+        // via evaluation of the polynomial whose coefficients are polynomials
+        // and whose input point is the pseudorandom scalar.
+        </span><span class="kw">let </span>aggregate_poly =
+            polynomial_eval(polys.iter().map(PolynomialMultiplier), pseudorandom_scalar);
+
+        <span class="comment">// aggregate proofs
+        // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
+        </span><span class="kw">let </span>aggregate_proofs: Vec&lt;P::Proof&gt; = (<span class="number">0</span>..<span class="self">self</span>.num_storage_nodes)
+            .map(|index| {
+                P::open(<span class="kw-2">&amp;</span><span class="self">self</span>.ck, <span class="kw-2">&amp;</span>aggregate_poly, <span class="kw-2">&amp;</span><span class="self">Self</span>::index_to_point(index)).map(|ok| ok.<span class="number">0</span>)
+            })
+            .collect::&lt;<span class="prelude-ty">Result</span>&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>shares = all_evals
+            .into_iter()
+            .zip(aggregate_proofs)
+            .enumerate()
+            .map(|(index, (evals, aggregate_proof))| {
+                <span class="prelude-val">Ok</span>(Share {
+                    index,
+                    evals,
+                    aggregate_proof,
+                    evals_proof: all_evals_commit
+                        .lookup(V::Index::from(index <span class="kw">as </span>u64))
+                        .expect_ok()<span class="question-mark">?
+                        </span>.<span class="number">1</span>,
                 })
-                .collect::&lt;<span class="prelude-ty">Result</span>&lt;<span class="kw">_</span>, anyhow::Error&gt;&gt;()<span class="question-mark">?</span>,
-            poly_commits,
-        ))
+            })
+            .collect::&lt;<span class="prelude-ty">Result</span>&lt;<span class="kw">_</span>, VidError&gt;&gt;()<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>((shares, common))
     }
 
     <span class="doccomment">/// Same as [`VidScheme::recover_payload`] except returns a [`Vec`] of field elements.
@@ -948,7 +1099,8 @@
         <span class="kw">let </span>result_len = num_polys * <span class="self">self</span>.payload_chunk_size;
         <span class="kw">let </span><span class="kw-2">mut </span>result = Vec::with_capacity(result_len);
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..num_polys {
-            <span class="kw">let </span><span class="kw-2">mut </span>coeffs = ReedSolomonErasureCode::decode(
+            <span class="comment">// TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
+            </span><span class="kw">let </span><span class="kw-2">mut </span>coeffs = ReedSolomonErasureCode::decode(
                 shares.iter().map(|s| ReedSolomonErasureCodeShare {
                     index: s.index + <span class="number">1</span>, <span class="comment">// 1-based index for ReedSolomonErasureCodeShare
                     </span>value: s.evals[i],
@@ -964,9 +1116,32 @@
     <span class="kw">fn </span>index_to_point(index: usize) -&gt; P::Point {
         P::Point::from((index + <span class="number">1</span>) <span class="kw">as </span>u64)
     }
-}
 
-<span class="kw">const </span>HASH_TO_FIELD_DOMAIN_SEP: <span class="kw-2">&amp;</span>[u8; <span class="number">4</span>] = <span class="string">b&quot;rick&quot;</span>;
+    <span class="kw">fn </span>pseudorandom_scalar(
+        common: <span class="kw-2">&amp;</span>&lt;<span class="self">Self </span><span class="kw">as </span>VidScheme&gt;::StorageCommon,
+    ) -&gt; VidResult&lt;P::Evaluation&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>hasher = H::new();
+        <span class="kw">for </span>poly_commit <span class="kw">in </span>common.poly_commits.iter() {
+            poly_commit.serialize_uncompressed(<span class="kw-2">&amp;mut </span>hasher)<span class="question-mark">?</span>;
+        }
+        common
+            .all_evals_digest
+            .serialize_uncompressed(<span class="kw-2">&amp;mut </span>hasher)<span class="question-mark">?</span>;
+
+        <span class="comment">// Notes on hash-to-field:
+        // - Can&#39;t use `Field::from_random_bytes` because it&#39;s fallible
+        //   (in what sense is it from &quot;random&quot; bytes?!)
+        // - `HashToField` does not expose an incremental API (ie. `update`)
+        //   so use an ordinary hasher and pipe `hasher.finalize()` through `hash_to_field` (sheesh!)
+        </span><span class="kw">const </span>HASH_TO_FIELD_DOMAIN_SEP: <span class="kw-2">&amp;</span>[u8; <span class="number">4</span>] = <span class="string">b&quot;rick&quot;</span>;
+        <span class="kw">let </span>hasher_to_field =
+            &lt;DefaultFieldHasher&lt;H&gt; <span class="kw">as </span>HashToField&lt;P::Evaluation&gt;&gt;::new(HASH_TO_FIELD_DOMAIN_SEP);
+        <span class="prelude-val">Ok</span>(<span class="kw-2">*</span>hasher_to_field
+            .hash_to_field(<span class="kw-2">&amp;</span>hasher.finalize(), <span class="number">1</span>)
+            .first()
+            .ok_or_else(|| <span class="macro">anyhow!</span>(<span class="string">&quot;hash_to_field output is empty&quot;</span>))<span class="question-mark">?</span>)
+    }
+}
 
 <span class="comment">// `From` impls for `VidError`
 //
@@ -1062,46 +1237,61 @@
     <span class="kw">use super</span>::{VidError::Argument, <span class="kw-2">*</span>};
 
     <span class="kw">use </span>ark_bls12_381::Bls12_381;
-    <span class="kw">use </span>ark_ec::pairing::Pairing;
     <span class="kw">use </span>ark_std::{rand::RngCore, vec};
-    <span class="kw">use </span>jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
+    <span class="kw">use </span>jf_primitives::merkle_tree::hasher::HasherNode;
     <span class="kw">use </span>sha2::Sha256;
-
-    <span class="kw">type </span>Pcs = UnivariateKzgPCS&lt;Bls12_381&gt;;
-    <span class="kw">type </span>G = &lt;Bls12_381 <span class="kw">as </span>Pairing&gt;::G1Affine;
-    <span class="kw">type </span>H = Sha256;
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>sad_path_verify_share_corrupt_share() {
         <span class="kw">let </span>(advz, bytes_random) = avdz_init();
         <span class="kw">let </span>(shares, common) = advz.dispersal_data(<span class="kw-2">&amp;</span>bytes_random).unwrap();
 
-        <span class="kw">for </span>share <span class="kw">in </span>shares {
+        <span class="kw">for </span>(i, share) <span class="kw">in </span>shares.iter().enumerate() {
             <span class="comment">// missing share eval
-            </span><span class="kw">let </span>share_missing_eval = Share {
-                evals: share.evals[<span class="number">1</span>..].to_vec(),
-                ..share.clone()
-            };
-            assert_arg_err(
-                advz.verify_share(<span class="kw-2">&amp;</span>share_missing_eval, <span class="kw-2">&amp;</span>common),
-                <span class="string">&quot;1 missing share should be arg error&quot;</span>,
-            );
+            </span>{
+                <span class="kw">let </span>share_missing_eval = Share {
+                    evals: share.evals[<span class="number">1</span>..].to_vec(),
+                    ..share.clone()
+                };
+                assert_arg_err(
+                    advz.verify_share(<span class="kw-2">&amp;</span>share_missing_eval, <span class="kw-2">&amp;</span>common),
+                    <span class="string">&quot;1 missing share should be arg error&quot;</span>,
+                );
+            }
 
             <span class="comment">// corrupted share eval
-            </span><span class="kw">let </span><span class="kw-2">mut </span>share_bad_eval = share.clone();
-            share_bad_eval.evals[<span class="number">0</span>].double_in_place();
-            advz.verify_share(<span class="kw-2">&amp;</span>share_bad_eval, <span class="kw-2">&amp;</span>common)
-                .unwrap()
-                .expect_err(<span class="string">&quot;bad share value should fail verification&quot;</span>);
+            </span>{
+                <span class="kw">let </span><span class="kw-2">mut </span>share_bad_eval = share.clone();
+                share_bad_eval.evals[<span class="number">0</span>].double_in_place();
+                advz.verify_share(<span class="kw-2">&amp;</span>share_bad_eval, <span class="kw-2">&amp;</span>common)
+                    .unwrap()
+                    .expect_err(<span class="string">&quot;bad share value should fail verification&quot;</span>);
+            }
 
             <span class="comment">// corrupted index
-            </span><span class="kw">let </span>share_bad_index = Share {
-                index: share.index + <span class="number">5</span>,
-                ..share.clone()
-            };
-            advz.verify_share(<span class="kw-2">&amp;</span>share_bad_index, <span class="kw-2">&amp;</span>common)
-                .unwrap()
-                .expect_err(<span class="string">&quot;bad share index should fail verification&quot;</span>);
+            </span>{
+                <span class="kw">let </span>share_bad_index = Share {
+                    index: share.index + <span class="number">5</span>,
+                    ..share.clone()
+                };
+                advz.verify_share(<span class="kw-2">&amp;</span>share_bad_index, <span class="kw-2">&amp;</span>common)
+                    .unwrap()
+                    .expect_err(<span class="string">&quot;bad share index should fail verification&quot;</span>);
+            }
+
+            <span class="comment">// corrupt eval proof
+            </span>{
+                <span class="comment">// We have no way to corrupt a proof
+                // (without also causing a deserialization failure).
+                // So we use another share&#39;s proof instead.
+                </span><span class="kw">let </span>share_bad_evals_proof = Share {
+                    evals_proof: shares[(i + <span class="number">1</span>) % shares.len()].evals_proof.clone(),
+                    ..share.clone()
+                };
+                advz.verify_share(<span class="kw-2">&amp;</span>share_bad_evals_proof, <span class="kw-2">&amp;</span>common)
+                    .unwrap()
+                    .expect_err(<span class="string">&quot;bad share evals proof should fail verification&quot;</span>);
+            }
         }
     }
 
@@ -1111,21 +1301,42 @@
         <span class="kw">let </span>(shares, common) = advz.dispersal_data(<span class="kw-2">&amp;</span>bytes_random).unwrap();
 
         <span class="comment">// missing commit
-        </span><span class="kw">let </span>common_missing_item = common[<span class="number">1</span>..].to_vec();
+        </span><span class="kw">let </span>common_missing_item = Common {
+            poly_commits: common.poly_commits[<span class="number">1</span>..].to_vec(),
+            ..common.clone()
+        };
         assert_arg_err(
             advz.verify_share(<span class="kw-2">&amp;</span>shares[<span class="number">0</span>], <span class="kw-2">&amp;</span>common_missing_item),
             <span class="string">&quot;1 missing commit should be arg error&quot;</span>,
         );
 
-        <span class="comment">// 1 corrupt commit
-        </span><span class="kw">let </span>common_1_corruption = {
-            <span class="kw">let </span><span class="kw-2">mut </span>corrupted = common; <span class="comment">// common.clone()
-            </span>corrupted[<span class="number">0</span>] = G::zero().into();
+        <span class="comment">// 1 corrupt commit, poly_commit
+        </span><span class="kw">let </span>common_1_poly_corruption = {
+            <span class="kw">let </span><span class="kw-2">mut </span>corrupted = common.clone();
+            corrupted.poly_commits[<span class="number">0</span>] = &lt;Bls12_381 <span class="kw">as </span>Pairing&gt;::G1Affine::zero().into();
             corrupted
         };
-        advz.verify_share(<span class="kw-2">&amp;</span>shares[<span class="number">0</span>], <span class="kw-2">&amp;</span>common_1_corruption)
+        advz.verify_share(<span class="kw-2">&amp;</span>shares[<span class="number">0</span>], <span class="kw-2">&amp;</span>common_1_poly_corruption)
             .unwrap()
-            .expect_err(<span class="string">&quot;1 corrupt commit should fail verification&quot;</span>);
+            .expect_err(<span class="string">&quot;1 corrupt poly_commit should fail verification&quot;</span>);
+
+        <span class="comment">// 1 corrupt commit, all_evals_digest
+        </span><span class="kw">let </span>common_1_digest_corruption = {
+            <span class="kw">let </span><span class="kw-2">mut </span>corrupted = common;
+            <span class="kw">let </span><span class="kw-2">mut </span>digest_bytes = <span class="macro">vec!</span>[<span class="number">0u8</span>; corrupted.all_evals_digest.uncompressed_size()];
+            corrupted
+                .all_evals_digest
+                .serialize_uncompressed(<span class="kw-2">&amp;mut </span>digest_bytes)
+                .expect(<span class="string">&quot;digest serialization should succeed&quot;</span>);
+            digest_bytes[<span class="number">0</span>] += <span class="number">1</span>;
+            corrupted.all_evals_digest =
+                HasherNode::deserialize_uncompressed(digest_bytes.as_slice())
+                    .expect(<span class="string">&quot;digest deserialization should succeed&quot;</span>);
+            corrupted
+        };
+        advz.verify_share(<span class="kw-2">&amp;</span>shares[<span class="number">0</span>], <span class="kw-2">&amp;</span>common_1_digest_corruption)
+            .unwrap()
+            .expect_err(<span class="string">&quot;1 corrupt all_evals_digest should fail verification&quot;</span>);
     }
 
     <span class="attr">#[test]
@@ -1136,8 +1347,8 @@
         <span class="kw">for </span><span class="kw-2">mut </span>share <span class="kw">in </span>shares {
             <span class="kw">let </span><span class="kw-2">mut </span>common_missing_items = common.clone();
 
-            <span class="kw">while </span>!common_missing_items.is_empty() {
-                common_missing_items.pop();
+            <span class="kw">while </span>!common_missing_items.poly_commits.is_empty() {
+                common_missing_items.poly_commits.pop();
                 share.evals.pop();
 
                 <span class="comment">// equal amounts of share evals, common items
@@ -1147,7 +1358,7 @@
             }
 
             <span class="comment">// ensure we tested the empty shares edge case
-            </span><span class="macro">assert!</span>(share.evals.is_empty() &amp;&amp; common_missing_items.is_empty())
+            </span><span class="macro">assert!</span>(share.evals.is_empty() &amp;&amp; common_missing_items.poly_commits.is_empty())
         }
     }
 
@@ -1156,29 +1367,31 @@
         <span class="kw">let </span>(advz, bytes_random) = avdz_init();
         <span class="kw">let </span>(shares, common) = advz.dispersal_data(<span class="kw-2">&amp;</span>bytes_random).unwrap();
 
-        <span class="comment">// unequal share eval lengths
-        </span><span class="kw">let </span><span class="kw-2">mut </span>shares_missing_evals = shares.clone();
-        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..shares_missing_evals.len() - <span class="number">1 </span>{
-            shares_missing_evals[i].evals.pop();
-            assert_arg_err(
-                advz.recover_payload(<span class="kw-2">&amp;</span>shares_missing_evals, <span class="kw-2">&amp;</span>common),
-                <span class="macro">format!</span>(<span class="string">&quot;{} shares missing 1 eval should be arg error&quot;</span>, i + <span class="number">1</span>).as_str(),
-            );
-        }
+        {
+            <span class="comment">// unequal share eval lengths
+            </span><span class="kw">let </span><span class="kw-2">mut </span>shares_missing_evals = shares.clone();
+            <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..shares_missing_evals.len() - <span class="number">1 </span>{
+                shares_missing_evals[i].evals.pop();
+                assert_arg_err(
+                    advz.recover_payload(<span class="kw-2">&amp;</span>shares_missing_evals, <span class="kw-2">&amp;</span>common),
+                    <span class="macro">format!</span>(<span class="string">&quot;{} shares missing 1 eval should be arg error&quot;</span>, i + <span class="number">1</span>).as_str(),
+                );
+            }
 
-        <span class="comment">// 1 eval missing from all shares
-        </span>shares_missing_evals.last_mut().unwrap().evals.pop();
-        <span class="kw">let </span>bytes_recovered = advz
-            .recover_payload(<span class="kw-2">&amp;</span>shares_missing_evals, <span class="kw-2">&amp;</span>common)
-            .expect(<span class="string">&quot;recover_payload should succeed when shares have equal eval lengths&quot;</span>);
-        <span class="macro">assert_ne!</span>(bytes_recovered, bytes_random);
-
-        <span class="comment">// corrupt indices
-        </span><span class="kw">let </span><span class="kw-2">mut </span>shares_bad_indices = shares; <span class="comment">// shares.clone()
-        </span><span class="kw">for </span>share <span class="kw">in </span><span class="kw-2">&amp;mut </span>shares_bad_indices {
-            share.index += <span class="number">5</span>;
+            <span class="comment">// 1 eval missing from all shares
+            </span>shares_missing_evals.last_mut().unwrap().evals.pop();
             <span class="kw">let </span>bytes_recovered = advz
                 .recover_payload(<span class="kw-2">&amp;</span>shares_missing_evals, <span class="kw-2">&amp;</span>common)
+                .expect(<span class="string">&quot;recover_payload should succeed when shares have equal eval lengths&quot;</span>);
+            <span class="macro">assert_ne!</span>(bytes_recovered, bytes_random);
+        }
+
+        <span class="comment">// corrupt indices
+        </span><span class="kw">let </span><span class="kw-2">mut </span>shares_bad_indices = shares;
+        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..shares_bad_indices.len() {
+            shares_bad_indices[i].index += <span class="number">5</span>;
+            <span class="kw">let </span>bytes_recovered = advz
+                .recover_payload(<span class="kw-2">&amp;</span>shares_bad_indices, <span class="kw-2">&amp;</span>common)
                 .expect(<span class="string">&quot;recover_payload should succeed for any share indices&quot;</span>);
             <span class="macro">assert_ne!</span>(bytes_recovered, bytes_random);
         }
@@ -1189,11 +1402,12 @@
     /// Returns the following tuple:
     /// 1. An initialized [`Advz`] instance.
     /// 2. A `Vec&lt;u8&gt;` filled with random bytes.
-    </span><span class="kw">fn </span>avdz_init() -&gt; (Advz&lt;Pcs, G, H&gt;, Vec&lt;u8&gt;) {
+    </span><span class="kw">fn </span>avdz_init() -&gt; (Advz&lt;Bls12_381, Sha256&gt;, Vec&lt;u8&gt;) {
         <span class="kw">let </span>(payload_chunk_size, num_storage_nodes) = (<span class="number">3</span>, <span class="number">5</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>rng = jf_utils::test_rng();
-        <span class="kw">let </span>srs = Pcs::gen_srs_for_testing(<span class="kw-2">&amp;mut </span>rng, payload_chunk_size).unwrap();
-        <span class="kw">let </span>advz = Advz::&lt;Pcs, G, H&gt;::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
+        <span class="kw">let </span>srs = UnivariateKzgPCS::&lt;Bls12_381&gt;::gen_srs_for_testing(<span class="kw-2">&amp;mut </span>rng, payload_chunk_size)
+            .unwrap();
+        <span class="kw">let </span>advz = Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
         <span class="kw">let </span><span class="kw-2">mut </span>bytes_random = <span class="macro">vec!</span>[<span class="number">0u8</span>; <span class="number">4000</span>];
         rng.fill_bytes(<span class="kw-2">&amp;mut </span>bytes_random);

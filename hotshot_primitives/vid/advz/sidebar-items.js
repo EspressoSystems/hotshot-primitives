@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Advz","Share"]};
+window.SIDEBAR_ITEMS = {"struct":["Common","GenericAdvz","Share"],"type":["Advz"]};
