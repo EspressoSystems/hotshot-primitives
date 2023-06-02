@@ -25,7 +25,7 @@ where
     let poly_degrees = [60, 80, 100, 120, 140];
     let payload_byte_lens = [10 * KB, 100 * KB, 1000 * KB];
 
-    // more items as af unction of the above
+    // more items as a function of the above
     let supported_degree = *poly_degrees.iter().max().unwrap();
     let mut rng = jf_utils::test_rng();
     let srs = UnivariateKzgPCS::<E>::gen_srs_for_testing(&mut rng, supported_degree).unwrap();
@@ -35,7 +35,7 @@ where
         rng.fill_bytes(&mut bytes_random);
 
         let mut grp = c.benchmark_group(format!("advz_disperse_{}_{}KB", pairing_name, len >> 10));
-        grp.throughput(Throughput::Bytes(len as u64)); // TODO does this make sense?
+        grp.throughput(Throughput::Bytes(len as u64));
 
         for &poly_degree in poly_degrees.iter() {
             let num_storage_nodes = poly_degree * RATE;
