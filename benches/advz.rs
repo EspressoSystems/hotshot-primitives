@@ -115,5 +115,5 @@ fn advz_main(c: &mut Criterion) {
     advz::<Bn254, Sha256>(c, "Bn254");
 }
 
-criterion_group!(benches, advz_main);
+criterion_group!(name = benches; config = Criterion::default().sample_size(10); targets = advz_main);
 criterion_main!(benches);
