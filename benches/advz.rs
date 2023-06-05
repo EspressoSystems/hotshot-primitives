@@ -1,4 +1,4 @@
-// #![deny(warnings)]
+#![deny(warnings)]
 use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
@@ -22,29 +22,87 @@ where
 {
     // play with these items
     const RATE: usize = 4; // ratio of num_storage_nodes : polynomial_degree
-    let poly_degrees = [60, 80, 100, 120, 140];
-    let payload_byte_lens = [10 * KB, 100 * KB, 1000 * KB];
+    let storage_node_counts = [100, 200, 300, 400, 500];
+    let payload_byte_lens = [100 * KB, 1000 * KB];
 
     // more items as a function of the above
-    let supported_degree = *poly_degrees.iter().max().unwrap();
+    let poly_degrees_iter = storage_node_counts.iter().map(|c| c / RATE);
+    let supported_degree = poly_degrees_iter.clone().max().unwrap();
+    let vid_sizes_iter = poly_degrees_iter.zip(storage_node_counts);
     let mut rng = jf_utils::test_rng();
     let srs = UnivariateKzgPCS::<E>::gen_srs_for_testing(&mut rng, supported_degree).unwrap();
 
+    // run all benches for each payload_byte_lens
     for len in payload_byte_lens {
-        let mut bytes_random = vec![0u8; len];
-        rng.fill_bytes(&mut bytes_random);
+        // random payload data
+        let mut payload_bytes = vec![0u8; len];
+        rng.fill_bytes(&mut payload_bytes);
 
-        let mut grp = c.benchmark_group(format!("advz_disperse_{}_{}KB", pairing_name, len >> 10));
+        let benchmark_group_name =
+            |op_name| format!("advz_{}_{}_{}KB", pairing_name, op_name, len / KB);
+
+        // commit
+        let mut grp = c.benchmark_group(benchmark_group_name("commit"));
         grp.throughput(Throughput::Bytes(len as u64));
-
-        for &poly_degree in poly_degrees.iter() {
-            let num_storage_nodes = poly_degree * RATE;
+        for (poly_degree, num_storage_nodes) in vid_sizes_iter.clone() {
             let advz = Advz::<E, H>::new(poly_degree, num_storage_nodes, &srs).unwrap();
             grp.bench_with_input(
                 BenchmarkId::from_parameter(num_storage_nodes),
                 &num_storage_nodes,
                 |b, _| {
-                    b.iter(|| advz.dispersal_data(&bytes_random).unwrap());
+                    b.iter(|| advz.commit(&payload_bytes).unwrap());
+                },
+            );
+        }
+        grp.finish();
+
+        // disperse
+        let mut grp = c.benchmark_group(benchmark_group_name("disperse"));
+        grp.throughput(Throughput::Bytes(len as u64));
+        for (poly_degree, num_storage_nodes) in vid_sizes_iter.clone() {
+            let advz = Advz::<E, H>::new(poly_degree, num_storage_nodes, &srs).unwrap();
+            grp.bench_with_input(
+                BenchmarkId::from_parameter(num_storage_nodes),
+                &num_storage_nodes,
+                |b, _| {
+                    b.iter(|| advz.dispersal_data(&payload_bytes).unwrap());
+                },
+            );
+        }
+        grp.finish();
+
+        // verify
+        let mut grp = c.benchmark_group(benchmark_group_name("verify"));
+        grp.throughput(Throughput::Bytes(len as u64));
+        for (poly_degree, num_storage_nodes) in vid_sizes_iter.clone() {
+            let advz = Advz::<E, H>::new(poly_degree, num_storage_nodes, &srs).unwrap();
+            let (shares, common) = advz.dispersal_data(&payload_bytes).unwrap();
+            grp.bench_with_input(
+                BenchmarkId::from_parameter(num_storage_nodes),
+                &num_storage_nodes,
+                |b, _| {
+                    // verify only the 0th share
+                    b.iter(|| advz.verify_share(&shares[0], &common).unwrap().unwrap());
+                },
+            );
+        }
+        grp.finish();
+
+        // recover
+        let mut grp = c.benchmark_group(benchmark_group_name("recover"));
+        grp.throughput(Throughput::Bytes(len as u64));
+        for (poly_degree, num_storage_nodes) in vid_sizes_iter.clone() {
+            let advz = Advz::<E, H>::new(poly_degree, num_storage_nodes, &srs).unwrap();
+            let (shares, common) = advz.dispersal_data(&payload_bytes).unwrap();
+            grp.bench_with_input(
+                BenchmarkId::from_parameter(num_storage_nodes),
+                &num_storage_nodes,
+                |b, _| {
+                    // recover from only the first poly_degree shares
+                    b.iter(|| {
+                        advz.recover_payload(&shares[..poly_degree], &common)
+                            .unwrap()
+                    });
                 },
             );
         }
