@@ -7,9 +7,9 @@ use anyhow::anyhow;
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{
     fields::field_hashers::{DefaultFieldHasher, HashToField},
-    Field,
+    FftField, Field,
 };
-use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Write};
 use ark_std::{
     borrow::Borrow,
@@ -29,7 +29,10 @@ use jf_primitives::{
         ErasureCode,
     },
     merkle_tree::{hasher::HasherMerkleTree, MerkleCommitment, MerkleTreeScheme},
-    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString},
+    pcs::{
+        prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString,
+        UnivariatePCS,
+    },
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements, canonical};
 use serde::{Deserialize, Serialize};
@@ -139,11 +142,12 @@ where
 // 5: `H` is a hasher
 impl<P, T, H, V> VidScheme for GenericAdvz<P, T, H, V>
 where
-    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
-    P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
-    P::Commitment: From<T> + AsRef<T>,                                                    // 3
-    T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
-    H: Digest + DynDigest + Default + Clone + Write,                                      // 5
+    P: UnivariatePCS<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P::Evaluation: FftField,
+    P::Polynomial: DenseUVPolynomial<P::Evaluation>, // 2
+    P::Commitment: From<T> + AsRef<T>,               // 3
+    T: AffineRepr<ScalarField = P::Evaluation>,      // 4
+    H: Digest + DynDigest + Default + Clone + Write, // 5
     V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
     V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
     V::Index: From<u64>,
@@ -217,11 +221,18 @@ where
         let aggregate_eval =
             polynomial_eval(share.evals.iter().map(FieldMultiplier), pseudorandom_scalar);
 
+        // prepare eval point for aggregate proof
+        let domain =
+            P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
+        // TODO(Gus) perf: linear dependence on number of storage nodes!
+        // TODO(Gus) don't unwrap
+        let point = domain.elements().nth(share.index).unwrap();
+
         // verify aggregate proof
         Ok(P::verify(
             &self.vk,
             &aggregate_poly_commit,
-            &Self::index_to_point(share.index),
+            &point,
             &aggregate_eval,
             &share.aggregate_proof,
         )?
@@ -242,7 +253,8 @@ where
 
 impl<P, T, H, V> GenericAdvz<P, T, H, V>
 where
-    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P: UnivariatePCS<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P::Evaluation: FftField,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
     P::Commitment: From<T> + AsRef<T>,
     T: AffineRepr<ScalarField = P::Evaluation>,
@@ -260,6 +272,8 @@ where
         <Self as VidScheme>::StorageCommon,
     )> {
         let num_polys = (payload.len() - 1) / self.payload_chunk_size + 1;
+        let domain =
+            P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
 
         // partition payload into polynomial coefficients
         let polys: Vec<P::Polynomial> = payload
@@ -268,41 +282,45 @@ where
             .collect();
 
         // evaluate polynomials
-        let all_evals = {
-            let mut all_evals = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+        let all_storage_node_evals = {
+            let mut all_storage_node_evals =
+                vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
 
-            // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
             for poly in polys.iter() {
-                for (index, evals) in all_evals.iter_mut().enumerate() {
-                    evals.push(poly.evaluate(&Self::index_to_point(index)));
+                let poly_evals = P::multi_open_rou_evals(poly, self.num_storage_nodes, &domain)?;
+
+                for (storage_node_evals, poly_eval) in
+                    all_storage_node_evals.iter_mut().zip(poly_evals)
+                {
+                    storage_node_evals.push(poly_eval);
                 }
             }
 
             // sanity checks
-            assert_eq!(all_evals.len(), self.num_storage_nodes);
-            for evals in all_evals.iter() {
-                assert_eq!(evals.len(), num_polys);
+            assert_eq!(all_storage_node_evals.len(), self.num_storage_nodes);
+            for storage_node_evals in all_storage_node_evals.iter() {
+                assert_eq!(storage_node_evals.len(), num_polys);
             }
 
-            all_evals
+            all_storage_node_evals
         };
 
         // vector commitment to polynomial evaluations
         // TODO why do I need to compute the height of the merkle tree?
-        let height: usize = all_evals
+        let height: usize = all_storage_node_evals
             .len()
             .checked_ilog(V::ARITY)
             .ok_or_else(|| {
                 VidError::Argument(format!(
                     "num_storage_nodes {} log base {} invalid",
-                    all_evals.len(),
+                    all_storage_node_evals.len(),
                     V::ARITY
                 ))
             })?
             .try_into()
             .expect("num_storage_nodes log base arity should fit into usize");
         let height = height + 1; // avoid fully qualified syntax for try_into()
-        let all_evals_commit = V::from_elems(height, &all_evals)?;
+        let all_evals_commit = V::from_elems(height, &all_storage_node_evals)?;
 
         // common data
         let common = Common {
@@ -324,14 +342,10 @@ where
             polynomial_eval(polys.iter().map(PolynomialMultiplier), pseudorandom_scalar);
 
         // aggregate proofs
-        // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
-        let aggregate_proofs: Vec<P::Proof> = (0..self.num_storage_nodes)
-            .map(|index| {
-                P::open(&self.ck, &aggregate_poly, &Self::index_to_point(index)).map(|ok| ok.0)
-            })
-            .collect::<Result<_, _>>()?;
+        let aggregate_proofs =
+            P::multi_open_rou_proofs(&self.ck, &aggregate_poly, self.num_storage_nodes, &domain)?;
 
-        let shares = all_evals
+        let shares = all_storage_node_evals
             .into_iter()
             .zip(aggregate_proofs)
             .enumerate()
@@ -400,10 +414,6 @@ where
         }
         assert_eq!(result.len(), result_len);
         Ok(result)
-    }
-
-    fn index_to_point(index: usize) -> P::Point {
-        P::Point::from((index + 1) as u64)
     }
 
     fn pseudorandom_scalar(
