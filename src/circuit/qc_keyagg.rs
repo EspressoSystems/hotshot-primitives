@@ -87,18 +87,24 @@ where
             self.create_constant_emulated_point_variable(neutral_point)?;
         let mut expect_agg_point_var = emulated_neutral_point_var.clone();
         for (vk, &bit) in vks.iter().zip(bit_vec.iter()) {
-
             let point_var =
                 self.binary_emulated_point_vars_select(bit, &emulated_neutral_point_var, &vk.0)?;
             println!(
-                "agg_point_1 = {:?}", self.emulated_point_witness(&expect_agg_point_var).unwrap());
-                
-            println!("point_var = {:?}",self.emulated_point_witness(&point_var).unwrap());
+                "agg_point_1 = {:?}",
+                self.emulated_point_witness(&expect_agg_point_var).unwrap()
+            );
+
+            println!(
+                "point_var = {:?}",
+                self.emulated_point_witness(&point_var).unwrap()
+            );
 
             expect_agg_point_var =
                 self.emulated_ecc_add::<E>(&expect_agg_point_var, &point_var, d_ecc)?;
             println!(
-                "agg_point_2 = {:?}", self.emulated_point_witness(&expect_agg_point_var).unwrap());
+                "agg_point_2 = {:?}",
+                self.emulated_point_witness(&expect_agg_point_var).unwrap()
+            );
         }
         // println!(
         //     "expected agg_vk: {:?}",
@@ -194,14 +200,17 @@ mod tests {
             vk_points
                 .iter()
                 .zip(bitvec.iter())
-                .fold(Projective::<P>::zero(), |acc, (x, &b)| {
-                    if b {
-                        (acc + x).into()
-                    } else {
-                        acc
-                    }
-                });
-        let agg_vk_point: Point<E> = ((&agg_vk_point).into_affine()).into();
+                .fold(
+                    Projective::<P>::zero(),
+                    |acc, (x, &b)| {
+                        if b {
+                            acc + x
+                        } else {
+                            acc
+                        }
+                    },
+                );
+        let agg_vk_point: Point<E> = (&agg_vk_point.into_affine()).into();
         println!("Point: {:?}", agg_vk_point);
         let vk_points: Vec<Point<E>> = vk_points
             .iter()
