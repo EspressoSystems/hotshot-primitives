@@ -11,6 +11,7 @@ repository = "https://github.com/EspressoSystems/hotshot-primitives"
 [dependencies]
 anyhow = "1.0"
 ark-bls12-381 = "0.4.0"
+ark-bls12-377 = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-ec = "0.4.0"
 ark-ff = "0.4.0"
