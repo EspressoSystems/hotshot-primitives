@@ -9,7 +9,7 @@ use jf_primitives::{circuit::rescue::RescueNativeGadget, rescue::RescueParameter
 use jf_relation::{
     errors::CircuitError,
     gadgets::{
-        ecc::{non_native::EmulatedPointVariable, Point},
+        ecc::{non_native::EmulatedPointVariable, Point, SWToTEConParam},
         EmulationConfig,
     },
     BoolVar, Circuit, PlonkCircuit, Variable,
@@ -30,7 +30,7 @@ where
     /// * `bit_vec` - the indicator vector for the quorum set, `bit_vec[i] = 1` if `i` is in the quorum set, o/w `bit_vec[i] = 0`.
     /// * `agg_vk` - the public aggregated stake key.
     /// * `d_ecc` - the twisted Edward curve parameter for the simulated curve
-    fn check_aggregate_vk<E: EmulationConfig<F>, P: SWCurveConfig<BaseField = E>>(
+    fn check_aggregate_vk<E: EmulationConfig<F> + SWToTEConParam, P: SWCurveConfig<BaseField = E>>(
         &mut self,
         vks: &[VerKeyVar<E>],
         bit_vec: &[BoolVar],
@@ -65,7 +65,10 @@ impl<F> QCKeyAggregateGadget<F> for PlonkCircuit<F>
 where
     F: RescueParameter,
 {
-    fn check_aggregate_vk<E: EmulationConfig<F>, P: SWCurveConfig<BaseField = E>>(
+    fn check_aggregate_vk<
+        E: EmulationConfig<F> + SWToTEConParam,
+        P: SWCurveConfig<BaseField = E>,
+    >(
         &mut self,
         vks: &[VerKeyVar<E>],
         bit_vec: &[BoolVar],
@@ -79,28 +82,32 @@ where
                 vks.len(),
             )));
         }
-        let neutral_point = Point::from(Projective::<P>::zero().into_affine());
+        let neutral_point: Point<E> = (&Projective::<P>::zero().into_affine()).into();
         let emulated_neutral_point_var =
             self.create_constant_emulated_point_variable(neutral_point)?;
         let mut expect_agg_point_var = emulated_neutral_point_var.clone();
         for (vk, &bit) in vks.iter().zip(bit_vec.iter()) {
+
             let point_var =
                 self.binary_emulated_point_vars_select(bit, &emulated_neutral_point_var, &vk.0)?;
             println!(
-                "point_var is: {:?}",
-                self.emulated_point_witness(&point_var).unwrap()
-            );
+                "agg_point_1 = {:?}", self.emulated_point_witness(&expect_agg_point_var).unwrap());
+                
+            println!("point_var = {:?}",self.emulated_point_witness(&point_var).unwrap());
+
             expect_agg_point_var =
                 self.emulated_ecc_add::<E>(&expect_agg_point_var, &point_var, d_ecc)?;
+            println!(
+                "agg_point_2 = {:?}", self.emulated_point_witness(&expect_agg_point_var).unwrap());
         }
-        println!(
-            "expected agg_vk: {:?}",
-            self.emulated_point_witness(&agg_vk.0).unwrap()
-        );
-        println!(
-            "emulated agg_vk: {:?}",
-            self.emulated_point_witness(&expect_agg_point_var).unwrap()
-        );
+        // println!(
+        //     "expected agg_vk: {:?}",
+        //     self.emulated_point_witness(&agg_vk.0).unwrap()
+        // );
+        // println!(
+        //     "emulated agg_vk: {:?}",
+        //     self.emulated_point_witness(&expect_agg_point_var).unwrap()
+        // );
         self.enforce_emulated_point_equal(&expect_agg_point_var, &agg_vk.0)
     }
 
@@ -212,7 +219,7 @@ mod tests {
             "agg_vk_var: {:?}",
             circuit.emulated_point_witness(&agg_vk_var.0).unwrap()
         );
-        
+
         let threshold_var = circuit.create_variable(threshold)?;
         let digest_var = circuit.create_variable(digest)?;
 
