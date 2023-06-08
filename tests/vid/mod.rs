@@ -36,28 +36,28 @@ where
             // sample a random subset of shares with size payload_chunk_size
             shares.shuffle(rng);
 
-            // // give minimum number of shares for recovery
-            // let bytes_recovered = vid
-            //     .recover_payload(&shares[..payload_chunk_size], &common)
-            //     .unwrap();
-            // assert_eq!(bytes_recovered, bytes_random);
+            // give minimum number of shares for recovery
+            let bytes_recovered = vid
+                .recover_payload(&shares[..payload_chunk_size], &common)
+                .unwrap();
+            assert_eq!(bytes_recovered, bytes_random);
 
-            // // give an intermediate number of shares for recovery
-            // let intermediate_num_shares = (payload_chunk_size + num_storage_nodes) / 2;
-            // let bytes_recovered = vid
-            //     .recover_payload(&shares[..intermediate_num_shares], &common)
-            //     .unwrap();
-            // assert_eq!(bytes_recovered, bytes_random);
+            // give an intermediate number of shares for recovery
+            let intermediate_num_shares = (payload_chunk_size + num_storage_nodes) / 2;
+            let bytes_recovered = vid
+                .recover_payload(&shares[..intermediate_num_shares], &common)
+                .unwrap();
+            assert_eq!(bytes_recovered, bytes_random);
 
-            // // give all shares for recovery
-            // let bytes_recovered = vid.recover_payload(&shares, &common).unwrap();
-            // assert_eq!(bytes_recovered, bytes_random);
+            // give all shares for recovery
+            let bytes_recovered = vid.recover_payload(&shares, &common).unwrap();
+            assert_eq!(bytes_recovered, bytes_random);
 
-            // // give insufficient shares for recovery
-            // assert_arg_err(
-            //     vid.recover_payload(&shares[..payload_chunk_size - 1], &common),
-            //     "insufficient shares should be arg error",
-            // );
+            // give insufficient shares for recovery
+            assert_arg_err(
+                vid.recover_payload(&shares[..payload_chunk_size - 1], &common),
+                "insufficient shares should be arg error",
+            );
         }
     }
 }

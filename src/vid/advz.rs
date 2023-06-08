@@ -24,15 +24,12 @@ use ark_std::{
 use derivative::Derivative;
 use digest::{crypto_common::Output, Digest, DynDigest};
 use jf_primitives::{
-    erasure_code::{
-        reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
-        ErasureCode,
-    },
     merkle_tree::{hasher::HasherMerkleTree, MerkleCommitment, MerkleTreeScheme},
     pcs::{
         prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString,
         UnivariatePCS,
     },
+    reed_solomon_code::reed_solomon_erasure_decode_rou,
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements, canonical};
 use serde::{Deserialize, Serialize};
@@ -401,14 +398,13 @@ where
 
         let result_len = num_polys * self.payload_chunk_size;
         let mut result = Vec::with_capacity(result_len);
+        let domain =
+            P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
         for i in 0..num_polys {
-            // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
-            let mut coeffs = ReedSolomonErasureCode::decode(
-                shares.iter().map(|s| ReedSolomonErasureCodeShare {
-                    index: s.index + 1, // 1-based index for ReedSolomonErasureCodeShare
-                    value: s.evals[i],
-                }),
+            let mut coeffs = reed_solomon_erasure_decode_rou(
+                shares.iter().map(|s| (s.index, s.evals[i])),
                 self.payload_chunk_size,
+                &domain,
             )?;
             result.append(&mut coeffs);
         }
