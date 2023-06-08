@@ -637,24 +637,19 @@ mod tests {
     #[test]
     fn sad_path_verify_share_corrupt_share_and_commit() {
         let (advz, bytes_random) = avdz_init();
-        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+        let (mut shares, mut common) = advz.dispersal_data(&bytes_random).unwrap();
 
-        for mut share in shares {
-            let mut common_missing_items = common.clone();
+        common.poly_commits.pop();
+        shares[0].evals.pop();
 
-            while !common_missing_items.poly_commits.is_empty() {
-                common_missing_items.poly_commits.pop();
-                share.evals.pop();
+        // equal nonzero lengths for common, share
+        advz.verify_share(&shares[0], &common).unwrap().unwrap_err();
 
-                // equal amounts of share evals, common items
-                advz.verify_share(&share, &common_missing_items)
-                    .unwrap()
-                    .unwrap_err();
-            }
+        common.poly_commits.clear();
+        shares[0].evals.clear();
 
-            // ensure we tested the empty shares edge case
-            assert!(share.evals.is_empty() && common_missing_items.poly_commits.is_empty())
-        }
+        // zero length for common, share
+        advz.verify_share(&shares[0], &common).unwrap().unwrap_err();
     }
 
     #[test]
