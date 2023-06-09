@@ -702,9 +702,8 @@ mod tests {
             let mut shares_bad_indices = shares.clone();
 
             // permute indices to avoid duplicates and keep them in bounds
-            for i in 0..shares_bad_indices.len() {
-                shares_bad_indices[i].index =
-                    (shares_bad_indices[i].index + 1) % advz.num_storage_nodes;
+            for share in &mut shares_bad_indices {
+                share.index = (share.index + 1) % advz.num_storage_nodes;
             }
 
             let bytes_recovered = advz
