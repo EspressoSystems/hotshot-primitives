@@ -180,12 +180,16 @@ where
         share: &Self::StorageShare,
         common: &Self::StorageCommon,
     ) -> VidResult<Result<(), ()>> {
+        // check arguments
         if share.evals.len() != common.poly_commits.len() {
             return Err(VidError::Argument(format!(
                 "(share eval, common poly commit) lengths differ ({},{})",
                 share.evals.len(),
                 common.poly_commits.len()
             )));
+        }
+        if share.index >= self.num_storage_nodes {
+            return Ok(Err(())); // not an arg error
         }
 
         // verify eval proof
@@ -221,9 +225,15 @@ where
         // prepare eval point for aggregate proof
         let domain =
             P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
-        // TODO(Gus) perf: linear dependence on number of storage nodes!
-        // TODO(Gus) don't unwrap
-        let point = domain.elements().nth(share.index).unwrap();
+        // TODO(Gus) perf: `nth` scales linearly with number of storage nodes!
+        // https://github.com/EspressoSystems/jellyfish/issues/313
+        let point = domain.elements().nth(share.index).ok_or_else(|| {
+            anyhow!(
+                "share index {} out of bounds {} was already checked",
+                share.index,
+                domain.size()
+            )
+        })?;
 
         // verify aggregate proof
         Ok(P::verify(
@@ -563,10 +573,21 @@ mod tests {
                     .expect_err("bad share value should fail verification");
             }
 
-            // corrupted index
+            // corrupted index, in bounds
             {
                 let share_bad_index = Share {
-                    index: share.index + 5,
+                    index: (share.index + 1) % advz.num_storage_nodes,
+                    ..share.clone()
+                };
+                advz.verify_share(&share_bad_index, &common)
+                    .unwrap()
+                    .expect_err("bad share index should fail verification");
+            }
+
+            // corrupted index, out of bounds
+            {
+                let share_bad_index = Share {
+                    index: share.index + advz.num_storage_nodes,
                     ..share.clone()
                 };
                 advz.verify_share(&share_bad_index, &common)
@@ -676,14 +697,35 @@ mod tests {
             assert_ne!(bytes_recovered, bytes_random);
         }
 
-        // corrupt indices
-        let mut shares_bad_indices = shares;
-        for i in 0..shares_bad_indices.len() {
-            shares_bad_indices[i].index += 5;
+        // corrupted index, in bounds
+        {
+            let mut shares_bad_indices = shares.clone();
+
+            // permute indices to avoid duplicates and keep them in bounds
+            for i in 0..shares_bad_indices.len() {
+                shares_bad_indices[i].index =
+                    (shares_bad_indices[i].index + 1) % advz.num_storage_nodes;
+            }
+
             let bytes_recovered = advz
                 .recover_payload(&shares_bad_indices, &common)
-                .expect("recover_payload should succeed for any share indices");
+                .expect("recover_payload should succeed when indices are in bounds");
             assert_ne!(bytes_recovered, bytes_random);
+        }
+
+        // corrupted index, out of bounds
+        {
+            let mut shares_bad_indices = shares;
+            let domain = UnivariateKzgPCS::<Bls12_381>::multi_open_rou_eval_domain(
+                advz.payload_chunk_size,
+                advz.num_storage_nodes,
+            )
+            .unwrap();
+            for i in 0..shares_bad_indices.len() {
+                shares_bad_indices[i].index += domain.size();
+                advz.recover_payload(&shares_bad_indices, &common)
+                    .expect_err("recover_payload should fail when indices are out of bounds");
+            }
         }
     }
 
