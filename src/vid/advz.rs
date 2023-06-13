@@ -68,7 +68,8 @@ where
 
 impl<P, T, H, V> GenericAdvz<P, T, H, V>
 where
-    P: PolynomialCommitmentScheme,
+    P: UnivariatePCS,
+    P::Evaluation: FftField,
 {
     /// Return a new instance of `Self`.
     ///
@@ -85,7 +86,7 @@ where
                 payload_chunk_size, num_storage_nodes
             )));
         }
-        let (ck, vk) = P::trim(srs, payload_chunk_size, None)?;
+        let (ck, vk) = P::trim_fft_size(srs, payload_chunk_size)?;
         Ok(Self {
             payload_chunk_size,
             num_storage_nodes,
