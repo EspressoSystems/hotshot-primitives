@@ -6,18 +6,19 @@ use ark_std::{
     vec,
 };
 
-pub fn round_trip<V, R>(vid_factory: impl Fn(usize, usize) -> V, rng: &mut R)
-where
+pub fn round_trip<V, R>(
+    vid_factory: impl Fn(usize, usize) -> V,
+    vid_sizes: &[(usize, usize)],
+    payload_byte_lens: &[usize],
+    rng: &mut R,
+) where
     V: VidScheme,
     R: RngCore + CryptoRng,
 {
-    let vid_sizes = [(2, 3), (3, 9)];
-    let byte_lens = [2, 16, 32, 47, 48, 49, 64, 100, 400];
-
-    for (payload_chunk_size, num_storage_nodes) in vid_sizes {
+    for &(payload_chunk_size, num_storage_nodes) in vid_sizes {
         let vid = vid_factory(payload_chunk_size, num_storage_nodes);
 
-        for len in byte_lens {
+        for &len in payload_byte_lens {
             println!(
                 "m: {} n: {} byte_len: {}",
                 payload_chunk_size, num_storage_nodes, len
