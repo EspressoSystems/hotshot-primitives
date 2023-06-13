@@ -8,7 +8,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use digest::{Digest, DynDigest, OutputSizeUser};
 use generic_array::ArrayLength;
 use hotshot_primitives::vid::{advz::Advz, VidScheme};
-use jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
+use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use sha2::Sha256;
 
 const KB: usize = 1 << 10;
@@ -31,9 +31,11 @@ where
     let supported_degree = poly_degrees_iter.clone().max().unwrap();
     let vid_sizes_iter = poly_degrees_iter.zip(storage_node_counts);
     let mut rng = jf_utils::test_rng();
-    let srs =
-        UnivariateKzgPCS::<E>::gen_srs_for_testing(&mut rng, checked_fft_size(supported_degree))
-            .unwrap();
+    let srs = UnivariateKzgPCS::<E>::gen_srs_for_testing(
+        &mut rng,
+        checked_fft_size(supported_degree).unwrap(),
+    )
+    .unwrap();
 
     // run all benches for each payload_byte_lens
     for len in payload_byte_lens {
@@ -110,16 +112,6 @@ where
             );
         }
         grp.finish();
-    }
-}
-
-// copied from https://github.com/EspressoSystems/jellyfish/blob/466a7604f00a6d5b142ae1b3b7aabcd1111f06df/primitives/src/pcs/mod.rs#L304
-// TODO make this upstream fn public
-fn checked_fft_size(degree: usize) -> usize {
-    if degree.is_power_of_two() {
-        degree.checked_mul(2).unwrap()
-    } else {
-        degree.checked_next_power_of_two().unwrap()
     }
 }
 

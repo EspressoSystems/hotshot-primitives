@@ -544,7 +544,7 @@ mod tests {
 
     use ark_bls12_381::Bls12_381;
     use ark_std::{rand::RngCore, vec};
-    use jf_primitives::merkle_tree::hasher::HasherNode;
+    use jf_primitives::{merkle_tree::hasher::HasherNode, pcs::checked_fft_size};
     use sha2::Sha256;
 
     #[test]
@@ -737,8 +737,11 @@ mod tests {
     fn avdz_init() -> (Advz<Bls12_381, Sha256>, Vec<u8>) {
         let (payload_chunk_size, num_storage_nodes) = (3, 5);
         let mut rng = jf_utils::test_rng();
-        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(&mut rng, payload_chunk_size)
-            .unwrap();
+        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
+            &mut rng,
+            checked_fft_size(payload_chunk_size).unwrap(),
+        )
+        .unwrap();
         let advz = Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
         let mut bytes_random = vec![0u8; 4000];

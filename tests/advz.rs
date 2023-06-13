@@ -2,7 +2,7 @@ use hotshot_primitives::vid::advz::Advz;
 
 use ark_bls12_381::Bls12_381;
 use ark_ff::{Field, PrimeField};
-use jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
+use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use sha2::Sha256;
 
 mod vid;
@@ -18,7 +18,7 @@ fn round_trip() {
     let mut rng = jf_utils::test_rng();
     let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
         &mut rng,
-        checked_fft_size(supported_degree),
+        checked_fft_size(supported_degree).unwrap(),
     )
     .unwrap();
 
@@ -36,14 +36,4 @@ fn round_trip() {
         &byte_lens,
         &mut rng,
     );
-}
-
-// copied from https://github.com/EspressoSystems/jellyfish/blob/466a7604f00a6d5b142ae1b3b7aabcd1111f06df/primitives/src/pcs/mod.rs#L304
-// TODO make this upstream fn public
-fn checked_fft_size(degree: usize) -> usize {
-    if degree.is_power_of_two() {
-        degree.checked_mul(2).unwrap()
-    } else {
-        degree.checked_next_power_of_two().unwrap()
-    }
 }
