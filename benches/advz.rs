@@ -12,6 +12,7 @@ use jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use sha2::Sha256;
 
 const KB: usize = 1 << 10;
+const MB: usize = KB << 10;
 
 fn advz<E, H>(c: &mut Criterion, pairing_name: &str)
 where
@@ -22,15 +23,17 @@ where
 {
     // play with these items
     const RATE: usize = 4; // ratio of num_storage_nodes : polynomial_degree
-    let storage_node_counts = [100, 200, 300, 400, 500];
-    let payload_byte_lens = [100 * KB, 1000 * KB];
+    let storage_node_counts = [600, 700, 800, 900, 1000];
+    let payload_byte_lens = [1 * MB];
 
     // more items as a function of the above
     let poly_degrees_iter = storage_node_counts.iter().map(|c| c / RATE);
     let supported_degree = poly_degrees_iter.clone().max().unwrap();
     let vid_sizes_iter = poly_degrees_iter.zip(storage_node_counts);
     let mut rng = jf_utils::test_rng();
-    let srs = UnivariateKzgPCS::<E>::gen_srs_for_testing(&mut rng, supported_degree).unwrap();
+    let srs =
+        UnivariateKzgPCS::<E>::gen_srs_for_testing(&mut rng, checked_fft_size(supported_degree))
+            .unwrap();
 
     // run all benches for each payload_byte_lens
     for len in payload_byte_lens {
@@ -107,6 +110,16 @@ where
             );
         }
         grp.finish();
+    }
+}
+
+// copied from https://github.com/EspressoSystems/jellyfish/blob/466a7604f00a6d5b142ae1b3b7aabcd1111f06df/primitives/src/pcs/mod.rs#L304
+// TODO make this upstream fn public
+fn checked_fft_size(degree: usize) -> usize {
+    if degree.is_power_of_two() {
+        degree.checked_mul(2).unwrap()
+    } else {
+        degree.checked_next_power_of_two().unwrap()
     }
 }
 
