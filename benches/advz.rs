@@ -8,10 +8,11 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use digest::{Digest, DynDigest, OutputSizeUser};
 use generic_array::ArrayLength;
 use hotshot_primitives::vid::{advz::Advz, VidScheme};
-use jf_primitives::pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
+use jf_primitives::pcs::{checked_fft_size, prelude::UnivariateKzgPCS, PolynomialCommitmentScheme};
 use sha2::Sha256;
 
 const KB: usize = 1 << 10;
+const MB: usize = KB << 10;
 
 fn advz<E, H>(c: &mut Criterion, pairing_name: &str)
 where
@@ -22,15 +23,19 @@ where
 {
     // play with these items
     const RATE: usize = 4; // ratio of num_storage_nodes : polynomial_degree
-    let storage_node_counts = [100, 200, 300, 400, 500];
-    let payload_byte_lens = [100 * KB, 1000 * KB];
+    let storage_node_counts = [600, 700, 800, 900, 1000];
+    let payload_byte_lens = [1 * MB];
 
     // more items as a function of the above
     let poly_degrees_iter = storage_node_counts.iter().map(|c| c / RATE);
     let supported_degree = poly_degrees_iter.clone().max().unwrap();
     let vid_sizes_iter = poly_degrees_iter.zip(storage_node_counts);
     let mut rng = jf_utils::test_rng();
-    let srs = UnivariateKzgPCS::<E>::gen_srs_for_testing(&mut rng, supported_degree).unwrap();
+    let srs = UnivariateKzgPCS::<E>::gen_srs_for_testing(
+        &mut rng,
+        checked_fft_size(supported_degree).unwrap(),
+    )
+    .unwrap();
 
     // run all benches for each payload_byte_lens
     for len in payload_byte_lens {
