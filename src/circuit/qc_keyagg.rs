@@ -4,7 +4,7 @@ use ark_ec::{
     CurveGroup,
 };
 use ark_ff::PrimeField;
-use ark_std::{format, println, vec, Zero};
+use ark_std::{format, vec, Zero};
 use jf_primitives::{circuit::rescue::RescueNativeGadget, rescue::RescueParameter};
 use jf_relation::{
     errors::CircuitError,
@@ -89,31 +89,9 @@ where
         for (vk, &bit) in vks.iter().zip(bit_vec.iter()) {
             let point_var =
                 self.binary_emulated_point_vars_select(bit, &emulated_neutral_point_var, &vk.0)?;
-            println!(
-                "agg_point_1 = {:?}",
-                self.emulated_point_witness(&expect_agg_point_var).unwrap()
-            );
-
-            println!(
-                "point_var = {:?}",
-                self.emulated_point_witness(&point_var).unwrap()
-            );
-
             expect_agg_point_var =
                 self.emulated_ecc_add::<E>(&expect_agg_point_var, &point_var, d_ecc)?;
-            println!(
-                "agg_point_2 = {:?}",
-                self.emulated_point_witness(&expect_agg_point_var).unwrap()
-            );
         }
-        // println!(
-        //     "expected agg_vk: {:?}",
-        //     self.emulated_point_witness(&agg_vk.0).unwrap()
-        // );
-        // println!(
-        //     "emulated agg_vk: {:?}",
-        //     self.emulated_point_witness(&expect_agg_point_var).unwrap()
-        // );
         self.enforce_emulated_point_equal(&expect_agg_point_var, &agg_vk.0)
     }
 
@@ -169,7 +147,7 @@ mod tests {
     use ark_bls12_377::{g1::Config as Param377, Fq as Fq377};
     use ark_bn254::Fr as Fr254;
     use ark_ff::MontFp;
-    use ark_std::{println, vec::Vec, UniformRand};
+    use ark_std::{vec::Vec, UniformRand};
     use jf_primitives::rescue::sponge::RescueCRHF;
     use jf_relation::{
         errors::CircuitError,
@@ -185,7 +163,6 @@ mod tests {
 
     // TODO: use Aggregate signature APIs to aggregate the keys outside the circuit
     // TODO: use BN curve base field
-    // TODO: how should we hash the points?
     fn test_vk_aggregate_circuit_helper<E, F, P>(d_ecc: E) -> Result<(), CircuitError>
     where
         E: EmulationConfig<F> + SWToTEConParam,
@@ -211,7 +188,6 @@ mod tests {
                     },
                 );
         let agg_vk_point: Point<E> = (&agg_vk_point.into_affine()).into();
-        println!("Point: {:?}", agg_vk_point);
         let vk_points: Vec<Point<E>> = vk_points
             .iter()
             .map(|p| (&p.into_affine()).into())
@@ -224,11 +200,6 @@ mod tests {
         // public input
         // TODO: make variables public?
         let agg_vk_var = VerKeyVar(circuit.create_emulated_point_variable(agg_vk_point)?);
-        println!(
-            "agg_vk_var: {:?}",
-            circuit.emulated_point_witness(&agg_vk_var.0).unwrap()
-        );
-
         let threshold_var = circuit.create_variable(threshold)?;
         let digest_var = circuit.create_variable(digest)?;
 
@@ -249,7 +220,6 @@ mod tests {
         circuit.check_aggregate_vk::<E, P>(&vk_vars[..], &bitvec_vars[..], &agg_vk_var, d_ecc)?;
         circuit.check_stake_table_digest(&vk_vars[..], &stake_amt_vars[..], digest_var)?;
         circuit.check_threshold(&stake_amt_vars[..], &bitvec_vars[..], threshold_var)?;
-        println!("{:?}", circuit.check_circuit_satisfiability(&[]));
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
 
         // bad path: wrong aggregated vk
@@ -283,6 +253,7 @@ mod tests {
         Ok(())
     }
 
+    // TODO(binyi): make the API public
     fn compute_stake_table_hash<F: RescueParameter, E: EmulationConfig<F>>(
         stake_amts: &[F],
         vk_points: &[Point<E>],
