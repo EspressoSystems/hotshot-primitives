@@ -266,6 +266,6 @@ mod tests {
             input_vec.extend(y_vec);
             input_vec.push(amt);
         }
-        return RescueCRHF::sponge_with_bit_padding(&input_vec[..], 1)[0];
+        RescueCRHF::sponge_with_bit_padding(&input_vec[..], 1)[0]
     }
 }
