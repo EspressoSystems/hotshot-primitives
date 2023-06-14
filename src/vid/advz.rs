@@ -224,17 +224,10 @@ where
             polynomial_eval(share.evals.iter().map(FieldMultiplier), pseudorandom_scalar);
 
         // prepare eval point for aggregate proof
+        // TODO(Gus) perf: don't re-compute domain elements: https://github.com/EspressoSystems/jellyfish/issues/313
         let domain =
             P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
-        // TODO(Gus) perf: `nth` scales linearly with number of storage nodes!
-        // https://github.com/EspressoSystems/jellyfish/issues/313
-        let point = domain.elements().nth(share.index).ok_or_else(|| {
-            anyhow!(
-                "share index {} out of bounds {} was already checked",
-                share.index,
-                domain.size()
-            )
-        })?;
+        let point = domain.element(share.index);
 
         // verify aggregate proof
         Ok(P::verify(
