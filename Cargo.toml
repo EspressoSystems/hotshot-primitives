@@ -26,9 +26,9 @@ digest = { version = "0.10" }
 displaydoc = { version = "0.2.3", default-features = false }
 ethereum-types = { version = "0.14.1", features = ["impl-serde"] }
 generic-array = "0.14.7"
-jf-relation = { git = "https://github.com/espressosystems/jellyfish", branch = "ecc-non-native-binyi" }
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish", branch = "ecc-non-native-binyi"}
-jf-utils = { git = "https://github.com/espressosystems/jellyfish", branch = "ecc-non-native-binyi"}
+jf-relation = { git = "https://github.com/espressosystems/jellyfish"}
+jf-primitives = { git = "https://github.com/espressosystems/jellyfish"}
+jf-utils = { git = "https://github.com/espressosystems/jellyfish"}
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
 sha3 = "0.10.7"
 tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
@@ -36,7 +36,7 @@ thiserror = "1.0"
 typenum = { version = "1.16.0" }
 
 [dev-dependencies]
-jf-primitives = { git = "https://github.com/espressosystems/jellyfish", features = ["test-srs"], branch = "ecc-non-native-binyi"}
+jf-primitives = { git = "https://github.com/espressosystems/jellyfish", features = ["test-srs"]}
 criterion = { version = "0.5.1", features = ["html_reports"] }
 sha2 = { version = "0.10" }
 
