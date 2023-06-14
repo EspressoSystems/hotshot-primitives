@@ -6,6 +6,11 @@ use ark_std::{
     vec,
 };
 
+/// Correctness test generic over anything that impls [`VidScheme`]
+///
+/// `pub` visibility, but it's not part of this crate's public API
+/// because it's in an integration test.
+/// <https://doc.rust-lang.org/book/ch11-03-test-organization.html#submodules-in-integration-tests>
 pub fn round_trip<V, R>(
     vid_factory: impl Fn(usize, usize) -> V,
     vid_sizes: &[(usize, usize)],
