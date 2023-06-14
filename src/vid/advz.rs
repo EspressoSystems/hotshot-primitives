@@ -7,9 +7,9 @@ use anyhow::anyhow;
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{
     fields::field_hashers::{DefaultFieldHasher, HashToField},
-    Field,
+    FftField, Field,
 };
-use ark_poly::{DenseUVPolynomial, Polynomial};
+use ark_poly::{DenseUVPolynomial, EvaluationDomain};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Write};
 use ark_std::{
     borrow::Borrow,
@@ -24,12 +24,12 @@ use ark_std::{
 use derivative::Derivative;
 use digest::{crypto_common::Output, Digest, DynDigest};
 use jf_primitives::{
-    erasure_code::{
-        reed_solomon_erasure::{ReedSolomonErasureCode, ReedSolomonErasureCodeShare},
-        ErasureCode,
-    },
     merkle_tree::{hasher::HasherMerkleTree, MerkleCommitment, MerkleTreeScheme},
-    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString},
+    pcs::{
+        prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString,
+        UnivariatePCS,
+    },
+    reed_solomon_code::reed_solomon_erasure_decode_rou,
 };
 use jf_utils::{bytes_from_field_elements, bytes_to_field_elements, canonical};
 use serde::{Deserialize, Serialize};
@@ -68,7 +68,8 @@ where
 
 impl<P, T, H, V> GenericAdvz<P, T, H, V>
 where
-    P: PolynomialCommitmentScheme,
+    P: UnivariatePCS,
+    P::Evaluation: FftField,
 {
     /// Return a new instance of `Self`.
     ///
@@ -85,7 +86,7 @@ where
                 payload_chunk_size, num_storage_nodes
             )));
         }
-        let (ck, vk) = P::trim(srs, payload_chunk_size, None)?;
+        let (ck, vk) = P::trim_fft_size(srs, payload_chunk_size)?;
         Ok(Self {
             payload_chunk_size,
             num_storage_nodes,
@@ -139,11 +140,12 @@ where
 // 5: `H` is a hasher
 impl<P, T, H, V> VidScheme for GenericAdvz<P, T, H, V>
 where
-    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>, // 1
-    P::Polynomial: DenseUVPolynomial<P::Evaluation>,                                      // 2
-    P::Commitment: From<T> + AsRef<T>,                                                    // 3
-    T: AffineRepr<ScalarField = P::Evaluation>,                                           // 4
-    H: Digest + DynDigest + Default + Clone + Write,                                      // 5
+    P: UnivariatePCS<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P::Evaluation: FftField,
+    P::Polynomial: DenseUVPolynomial<P::Evaluation>, // 2
+    P::Commitment: From<T> + AsRef<T>,               // 3
+    T: AffineRepr<ScalarField = P::Evaluation>,      // 4
+    H: Digest + DynDigest + Default + Clone + Write, // 5
     V: MerkleTreeScheme<Element = Vec<P::Evaluation>>,
     V::MembershipProof: Sync + Debug, // TODO https://github.com/EspressoSystems/jellyfish/issues/253
     V::Index: From<u64>,
@@ -179,12 +181,16 @@ where
         share: &Self::StorageShare,
         common: &Self::StorageCommon,
     ) -> VidResult<Result<(), ()>> {
+        // check arguments
         if share.evals.len() != common.poly_commits.len() {
             return Err(VidError::Argument(format!(
                 "(share eval, common poly commit) lengths differ ({},{})",
                 share.evals.len(),
                 common.poly_commits.len()
             )));
+        }
+        if share.index >= self.num_storage_nodes {
+            return Ok(Err(())); // not an arg error
         }
 
         // verify eval proof
@@ -217,11 +223,17 @@ where
         let aggregate_eval =
             polynomial_eval(share.evals.iter().map(FieldMultiplier), pseudorandom_scalar);
 
+        // prepare eval point for aggregate proof
+        // TODO(Gus) perf: don't re-compute domain elements: https://github.com/EspressoSystems/jellyfish/issues/313
+        let domain =
+            P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
+        let point = domain.element(share.index);
+
         // verify aggregate proof
         Ok(P::verify(
             &self.vk,
             &aggregate_poly_commit,
-            &Self::index_to_point(share.index),
+            &point,
             &aggregate_eval,
             &share.aggregate_proof,
         )?
@@ -242,7 +254,8 @@ where
 
 impl<P, T, H, V> GenericAdvz<P, T, H, V>
 where
-    P: PolynomialCommitmentScheme<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P: UnivariatePCS<Point = <P as PolynomialCommitmentScheme>::Evaluation>,
+    P::Evaluation: FftField,
     P::Polynomial: DenseUVPolynomial<P::Evaluation>,
     P::Commitment: From<T> + AsRef<T>,
     T: AffineRepr<ScalarField = P::Evaluation>,
@@ -260,6 +273,8 @@ where
         <Self as VidScheme>::StorageCommon,
     )> {
         let num_polys = (payload.len() - 1) / self.payload_chunk_size + 1;
+        let domain =
+            P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
 
         // partition payload into polynomial coefficients
         let polys: Vec<P::Polynomial> = payload
@@ -268,41 +283,45 @@ where
             .collect();
 
         // evaluate polynomials
-        let all_evals = {
-            let mut all_evals = vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
+        let all_storage_node_evals = {
+            let mut all_storage_node_evals =
+                vec![Vec::with_capacity(num_polys); self.num_storage_nodes];
 
-            // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
             for poly in polys.iter() {
-                for (index, evals) in all_evals.iter_mut().enumerate() {
-                    evals.push(poly.evaluate(&Self::index_to_point(index)));
+                let poly_evals = P::multi_open_rou_evals(poly, self.num_storage_nodes, &domain)?;
+
+                for (storage_node_evals, poly_eval) in
+                    all_storage_node_evals.iter_mut().zip(poly_evals)
+                {
+                    storage_node_evals.push(poly_eval);
                 }
             }
 
             // sanity checks
-            assert_eq!(all_evals.len(), self.num_storage_nodes);
-            for evals in all_evals.iter() {
-                assert_eq!(evals.len(), num_polys);
+            assert_eq!(all_storage_node_evals.len(), self.num_storage_nodes);
+            for storage_node_evals in all_storage_node_evals.iter() {
+                assert_eq!(storage_node_evals.len(), num_polys);
             }
 
-            all_evals
+            all_storage_node_evals
         };
 
         // vector commitment to polynomial evaluations
         // TODO why do I need to compute the height of the merkle tree?
-        let height: usize = all_evals
+        let height: usize = all_storage_node_evals
             .len()
             .checked_ilog(V::ARITY)
             .ok_or_else(|| {
                 VidError::Argument(format!(
                     "num_storage_nodes {} log base {} invalid",
-                    all_evals.len(),
+                    all_storage_node_evals.len(),
                     V::ARITY
                 ))
             })?
             .try_into()
             .expect("num_storage_nodes log base arity should fit into usize");
         let height = height + 1; // avoid fully qualified syntax for try_into()
-        let all_evals_commit = V::from_elems(height, &all_evals)?;
+        let all_evals_commit = V::from_elems(height, &all_storage_node_evals)?;
 
         // common data
         let common = Common {
@@ -324,14 +343,10 @@ where
             polynomial_eval(polys.iter().map(PolynomialMultiplier), pseudorandom_scalar);
 
         // aggregate proofs
-        // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
-        let aggregate_proofs: Vec<P::Proof> = (0..self.num_storage_nodes)
-            .map(|index| {
-                P::open(&self.ck, &aggregate_poly, &Self::index_to_point(index)).map(|ok| ok.0)
-            })
-            .collect::<Result<_, _>>()?;
+        let aggregate_proofs =
+            P::multi_open_rou_proofs(&self.ck, &aggregate_poly, self.num_storage_nodes, &domain)?;
 
-        let shares = all_evals
+        let shares = all_storage_node_evals
             .into_iter()
             .zip(aggregate_proofs)
             .enumerate()
@@ -387,23 +402,18 @@ where
 
         let result_len = num_polys * self.payload_chunk_size;
         let mut result = Vec::with_capacity(result_len);
+        let domain =
+            P::multi_open_rou_eval_domain(self.payload_chunk_size, self.num_storage_nodes)?;
         for i in 0..num_polys {
-            // TODO https://github.com/EspressoSystems/hotshot-primitives/issues/19
-            let mut coeffs = ReedSolomonErasureCode::decode(
-                shares.iter().map(|s| ReedSolomonErasureCodeShare {
-                    index: s.index + 1, // 1-based index for ReedSolomonErasureCodeShare
-                    value: s.evals[i],
-                }),
+            let mut coeffs = reed_solomon_erasure_decode_rou(
+                shares.iter().map(|s| (s.index, s.evals[i])),
                 self.payload_chunk_size,
+                &domain,
             )?;
             result.append(&mut coeffs);
         }
         assert_eq!(result.len(), result_len);
         Ok(result)
-    }
-
-    fn index_to_point(index: usize) -> P::Point {
-        P::Point::from((index + 1) as u64)
     }
 
     fn pseudorandom_scalar(
@@ -527,7 +537,7 @@ mod tests {
 
     use ark_bls12_381::Bls12_381;
     use ark_std::{rand::RngCore, vec};
-    use jf_primitives::merkle_tree::hasher::HasherNode;
+    use jf_primitives::{merkle_tree::hasher::HasherNode, pcs::checked_fft_size};
     use sha2::Sha256;
 
     #[test]
@@ -557,10 +567,21 @@ mod tests {
                     .expect_err("bad share value should fail verification");
             }
 
-            // corrupted index
+            // corrupted index, in bounds
             {
                 let share_bad_index = Share {
-                    index: share.index + 5,
+                    index: (share.index + 1) % advz.num_storage_nodes,
+                    ..share.clone()
+                };
+                advz.verify_share(&share_bad_index, &common)
+                    .unwrap()
+                    .expect_err("bad share index should fail verification");
+            }
+
+            // corrupted index, out of bounds
+            {
+                let share_bad_index = Share {
+                    index: share.index + advz.num_storage_nodes,
                     ..share.clone()
                 };
                 advz.verify_share(&share_bad_index, &common)
@@ -631,24 +652,19 @@ mod tests {
     #[test]
     fn sad_path_verify_share_corrupt_share_and_commit() {
         let (advz, bytes_random) = avdz_init();
-        let (shares, common) = advz.dispersal_data(&bytes_random).unwrap();
+        let (mut shares, mut common) = advz.dispersal_data(&bytes_random).unwrap();
 
-        for mut share in shares {
-            let mut common_missing_items = common.clone();
+        common.poly_commits.pop();
+        shares[0].evals.pop();
 
-            while !common_missing_items.poly_commits.is_empty() {
-                common_missing_items.poly_commits.pop();
-                share.evals.pop();
+        // equal nonzero lengths for common, share
+        advz.verify_share(&shares[0], &common).unwrap().unwrap_err();
 
-                // equal amounts of share evals, common items
-                advz.verify_share(&share, &common_missing_items)
-                    .unwrap()
-                    .unwrap_err();
-            }
+        common.poly_commits.clear();
+        shares[0].evals.clear();
 
-            // ensure we tested the empty shares edge case
-            assert!(share.evals.is_empty() && common_missing_items.poly_commits.is_empty())
-        }
+        // zero length for common, share
+        advz.verify_share(&shares[0], &common).unwrap().unwrap_err();
     }
 
     #[test]
@@ -675,14 +691,34 @@ mod tests {
             assert_ne!(bytes_recovered, bytes_random);
         }
 
-        // corrupt indices
-        let mut shares_bad_indices = shares;
-        for i in 0..shares_bad_indices.len() {
-            shares_bad_indices[i].index += 5;
+        // corrupted index, in bounds
+        {
+            let mut shares_bad_indices = shares.clone();
+
+            // permute indices to avoid duplicates and keep them in bounds
+            for share in &mut shares_bad_indices {
+                share.index = (share.index + 1) % advz.num_storage_nodes;
+            }
+
             let bytes_recovered = advz
                 .recover_payload(&shares_bad_indices, &common)
-                .expect("recover_payload should succeed for any share indices");
+                .expect("recover_payload should succeed when indices are in bounds");
             assert_ne!(bytes_recovered, bytes_random);
+        }
+
+        // corrupted index, out of bounds
+        {
+            let mut shares_bad_indices = shares;
+            let domain = UnivariateKzgPCS::<Bls12_381>::multi_open_rou_eval_domain(
+                advz.payload_chunk_size,
+                advz.num_storage_nodes,
+            )
+            .unwrap();
+            for i in 0..shares_bad_indices.len() {
+                shares_bad_indices[i].index += domain.size();
+                advz.recover_payload(&shares_bad_indices, &common)
+                    .expect_err("recover_payload should fail when indices are out of bounds");
+            }
         }
     }
 
@@ -694,8 +730,11 @@ mod tests {
     fn avdz_init() -> (Advz<Bls12_381, Sha256>, Vec<u8>) {
         let (payload_chunk_size, num_storage_nodes) = (3, 5);
         let mut rng = jf_utils::test_rng();
-        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(&mut rng, payload_chunk_size)
-            .unwrap();
+        let srs = UnivariateKzgPCS::<Bls12_381>::gen_srs_for_testing(
+            &mut rng,
+            checked_fft_size(payload_chunk_size).unwrap(),
+        )
+        .unwrap();
         let advz = Advz::new(payload_chunk_size, num_storage_nodes, srs).unwrap();
 
         let mut bytes_random = vec![0u8; 4000];
