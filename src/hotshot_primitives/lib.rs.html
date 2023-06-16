@@ -7,10 +7,10 @@
 <a href="#7" id="7">7</a>
 <a href="#8" id="8">8</a>
 </pre></div><pre class="rust"><code><span class="attr">#![cfg_attr(not(feature = <span class="string">&quot;std&quot;</span>), no_std)]
-#![deny(warnings)]
 </span><span class="comment">// #![warn(missing_docs)] // TODO need rustdoc for stake_table
 
-</span><span class="kw">pub mod </span>quorum_certificate;
+</span><span class="kw">pub mod </span>circuit;
+<span class="kw">pub mod </span>quorum_certificate;
 <span class="kw">pub mod </span>stake_table;
 <span class="kw">pub mod </span>vdf;
 <span class="kw">pub mod </span>vid;
