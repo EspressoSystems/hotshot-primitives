@@ -1,7 +1,7 @@
 //! Implementation for BitVectorQC that uses BLS signature + Bit vector.
 //! See more details in HotShot paper.
 
-use crate::qc::QuorumCertificateValidation;
+use crate::qc::QuorumCertificate;
 use ark_std::{
     fmt::Debug,
     format,
@@ -19,10 +19,11 @@ use jf_primitives::signatures::AggregateableSignatureSchemes;
 use serde::{Deserialize, Serialize};
 use typenum::U32;
 
+/// An implementation of QC using BLS signature and a bit-vector.
 #[derive(Serialize, Deserialize)]
-pub struct BitvectorQuorumCertificate<
-    A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
->(PhantomData<A>);
+pub struct BitVectorQC<A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>>(
+    PhantomData<A>,
+);
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct StakeTableEntry<V> {
@@ -37,7 +38,7 @@ pub struct QCParams<V, P> {
     pub agg_sig_pp: P,
 }
 
-impl<A> QuorumCertificateValidation<A> for BitvectorQuorumCertificate<A>
+impl<A> QuorumCertificate<A> for BitVectorQC<A>
 where
     A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a>,
 {
@@ -46,41 +47,43 @@ where
     // TODO: later with SNARKs we'll use a smaller verifier parameter
     type QCVerifierParams = QCParams<A::VerificationKey, A::PublicParameter>;
 
-    type Proof = BitVec;
+    type QC = (A::Signature, BitVec);
     type MessageLength = U32;
     type CheckedType = ();
 
-    fn partial_sign<R: CryptoRng + RngCore>(
+    fn sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
-        sig_key: &A::SigningKey,
+        sk: &A::SigningKey,
         prng: &mut R,
     ) -> Result<A::Signature, PrimitivesError> {
-        A::sign(agg_sig_pp, sig_key, message, prng)
+        A::sign(agg_sig_pp, sk, message, prng)
     }
 
     fn assemble(
         qc_pp: &Self::QCProverParams,
-        active_keys: &BitSlice,
-        partial_sigs: &[A::Signature],
-    ) -> Result<(A::Signature, Self::Proof), PrimitivesError> {
-        if active_keys.len() != qc_pp.stake_entries.len() {
+        signers: &BitSlice,
+        sigs: &[A::Signature],
+    ) -> Result<Self::QC, PrimitivesError> {
+        if signers.len() != qc_pp.stake_entries.len() {
             return Err(ParameterError(format!(
                 "bit vector len {} != the number of stake entries {}",
-                active_keys.len(),
+                signers.len(),
                 qc_pp.stake_entries.len(),
             )));
         }
-        let total_weight: U256 = qc_pp.stake_entries.iter().zip(active_keys.iter()).fold(
-            U256::zero(),
-            |acc, (entry, b)| {
-                if *b {
-                    acc + entry.stake_amount
-                } else {
-                    acc
-                }
-            },
-        );
+        let total_weight: U256 =
+            qc_pp
+                .stake_entries
+                .iter()
+                .zip(signers.iter())
+                .fold(U256::zero(), |acc, (entry, b)| {
+                    if *b {
+                        acc + entry.stake_amount
+                    } else {
+                        acc
+                    }
+                });
         if total_weight < qc_pp.threshold {
             return Err(ParameterError(format!(
                 "total_weight {} less than threshold {}",
@@ -88,29 +91,29 @@ where
             )));
         }
         let mut ver_keys = vec![];
-        for (entry, b) in qc_pp.stake_entries.iter().zip(active_keys.iter()) {
+        for (entry, b) in qc_pp.stake_entries.iter().zip(signers.iter()) {
             if *b {
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        if ver_keys.len() != partial_sigs.len() {
+        if ver_keys.len() != sigs.len() {
             return Err(ParameterError(format!(
                 "the number of ver_keys {} != the number of partial signatures {}",
                 ver_keys.len(),
-                partial_sigs.len(),
+                sigs.len(),
             )));
         }
-        let sig = A::aggregate(&qc_pp.agg_sig_pp, &ver_keys[..], partial_sigs)?;
+        let sig = A::aggregate(&qc_pp.agg_sig_pp, &ver_keys[..], sigs)?;
 
-        Ok((sig, active_keys.into()))
+        Ok((sig, signers.into()))
     }
 
     fn check(
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
-        sig: &A::Signature,
-        proof: &Self::Proof,
+        qc: &Self::QC,
     ) -> Result<Self::CheckedType, PrimitivesError> {
+        let (sig, proof) = qc;
         if proof.len() != qc_vp.stake_entries.len() {
             return Err(ParameterError(format!(
                 "proof bit vector len {} != the number of stake entries {}",
@@ -177,21 +180,21 @@ mod tests {
                 agg_sig_pp,
             };
             let msg = [72u8; 32];
-            let sig1 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
+            let sig1 = BitVectorQC::<$aggsig>::sign(
                 &agg_sig_pp,
                 &msg.into(),
                 key_pair1.sign_key_ref(),
                 &mut rng,
             )
             .unwrap();
-            let sig2 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
+            let sig2 = BitVectorQC::<$aggsig>::sign(
                 &agg_sig_pp,
                 &msg.into(),
                 key_pair2.sign_key_ref(),
                 &mut rng,
             )
             .unwrap();
-            let sig3 = BitvectorQuorumCertificate::<$aggsig>::partial_sign(
+            let sig3 = BitVectorQC::<$aggsig>::sign(
                 &agg_sig_pp,
                 &msg.into(),
                 key_pair3.sign_key_ref(),
@@ -200,20 +203,14 @@ mod tests {
             .unwrap();
 
             // happy path
-            let active_keys = bitvec![0, 1, 1];
-            let qc = BitvectorQuorumCertificate::<$aggsig>::assemble(
+            let signers = bitvec![0, 1, 1];
+            let qc = BitVectorQC::<$aggsig>::assemble(
                 &qc_pp,
-                active_keys.as_bitslice(),
+                signers.as_bitslice(),
                 &[sig2.clone(), sig3.clone()],
             )
             .unwrap();
-            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
-                &qc_pp,
-                &msg.into(),
-                &qc.0,
-                &qc.1
-            )
-            .is_ok());
+            assert!(BitVectorQC::<$aggsig>::check(&qc_pp, &msg.into(), &qc).is_ok());
 
             // Check the QC and the QCParams can be serialized / deserialized
             assert_eq!(
@@ -228,15 +225,15 @@ mod tests {
 
             // bad paths
             // number of signatures unmatch
-            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
+            assert!(BitVectorQC::<$aggsig>::assemble(
                 &qc_pp,
-                active_keys.as_bitslice(),
+                signers.as_bitslice(),
                 &[sig2.clone()]
             )
             .is_err());
             // total weight under threshold
             let active_bad = bitvec![1, 1, 0];
-            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
+            assert!(BitVectorQC::<$aggsig>::assemble(
                 &qc_pp,
                 active_bad.as_bitslice(),
                 &[sig1.clone(), sig2.clone()]
@@ -244,44 +241,33 @@ mod tests {
             .is_err());
             // wrong bool vector length
             let active_bad_2 = bitvec![0, 1, 1, 0];
-            assert!(BitvectorQuorumCertificate::<$aggsig>::assemble(
+            assert!(BitVectorQC::<$aggsig>::assemble(
                 &qc_pp,
                 active_bad_2.as_bitslice(),
                 &[sig2, sig3],
             )
             .is_err());
 
-            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
+            assert!(BitVectorQC::<$aggsig>::check(
                 &qc_pp,
                 &msg.into(),
-                &qc.0,
-                &active_bad
+                &(qc.0.clone(), active_bad)
             )
             .is_err());
-            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
+            assert!(BitVectorQC::<$aggsig>::check(
                 &qc_pp,
                 &msg.into(),
-                &qc.0,
-                &active_bad_2
+                &(qc.0.clone(), active_bad_2)
             )
             .is_err());
             let bad_msg = [70u8; 32];
-            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
-                &qc_pp,
-                &bad_msg.into(),
-                &qc.0,
-                &qc.1
-            )
-            .is_err());
+            assert!(BitVectorQC::<$aggsig>::check(&qc_pp, &bad_msg.into(), &qc).is_err());
 
             let bad_sig = &sig1;
-            assert!(BitvectorQuorumCertificate::<$aggsig>::check(
-                &qc_pp,
-                &msg.into(),
-                &bad_sig,
-                &qc.1
-            )
-            .is_err());
+            assert!(
+                BitVectorQC::<$aggsig>::check(&qc_pp, &msg.into(), &(bad_sig.clone(), qc.1))
+                    .is_err()
+            );
         };
     }
     #[test]
