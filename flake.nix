@@ -19,19 +19,19 @@
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
-  outputs = { self, nixpkgs, flake-utils, flake-compat, rust-overlay, pre-commit-hooks, ... }:
+  outputs = { self, nixpkgs, flake-utils, flake-compat, rust-overlay
+    , pre-commit-hooks, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith
-          (toolchain: toolchain.minimal.override { extensions = [ "rustfmt" ]; });
+        nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
+          toolchain.minimal.override { extensions = [ "rustfmt" ]; });
 
         stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
           extensions = [ "clippy" "llvm-tools-preview" "rust-src" ];
         };
-      in with pkgs;
-      {
+      in with pkgs; {
         check = {
           pre-commit-check = pre-commit-hooks.lib.${system}.run {
             src = ./.;
@@ -74,18 +74,20 @@
             nightlyToolchain
             cargo-sort
 
-          ] ++ lib.optionals stdenv.isDarwin [ darwin.apple_sdk.frameworks.Security ];
+          ] ++ lib.optionals stdenv.isDarwin
+            [ darwin.apple_sdk.frameworks.Security ];
 
           shellHook = ''
             export RUST_BACKTRACE=full
             export PATH="$PATH:$(pwd)/target/debug:$(pwd)/target/release"
+            # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts with local rustup installations.
+            export CARGO_HOME=$HOME/.cargo-nix
 
             # Ensure `cargo fmt` uses `rustfmt` from nightly.
             export RUSTFMT="${nightlyToolchain}/bin/rustfmt"
           ''
-          # install pre-commit hooks
-          + self.check.${system}.pre-commit-check.shellHook;
+            # install pre-commit hooks
+            + self.check.${system}.pre-commit-check.shellHook;
         };
-      }
-    );
+      });
 }
