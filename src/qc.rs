@@ -1,6 +1,9 @@
 //! Quorum Certificate traits and implementations.
 
-use ark_std::rand::{CryptoRng, RngCore};
+use ark_std::{
+    rand::{CryptoRng, RngCore},
+    vec::Vec,
+};
 use bitvec::prelude::*;
 use generic_array::{ArrayLength, GenericArray};
 use jf_primitives::errors::PrimitivesError;
@@ -61,8 +64,15 @@ pub trait QuorumCertificate<A: AggregateableSignatureSchemes + Serialize + for<'
     /// * `qc` - quroum certificate
     /// * `returns` - nothing if the signature is valid, an error otherwise.
     fn check(
-        qc_pp: &Self::QCVerifierParams,
+        qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
     ) -> Result<Self::CheckedType, PrimitivesError>;
+
+    /// Trace the list of signers given a qc.
+    fn trace(
+        qc_vp: &Self::QCVerifierParams,
+        message: &GenericArray<A::MessageUnit, Self::MessageLength>,
+        qc: &Self::QC,
+    ) -> Result<Vec<A::VerificationKey>, PrimitivesError>;
 }

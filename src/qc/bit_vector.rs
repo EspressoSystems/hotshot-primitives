@@ -113,11 +113,11 @@ where
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
     ) -> Result<Self::CheckedType, PrimitivesError> {
-        let (sig, proof) = qc;
-        if proof.len() != qc_vp.stake_entries.len() {
+        let (sig, signers) = qc;
+        if signers.len() != qc_vp.stake_entries.len() {
             return Err(ParameterError(format!(
-                "proof bit vector len {} != the number of stake entries {}",
-                proof.len(),
+                "signers bit vector len {} != the number of stake entries {}",
+                signers.len(),
                 qc_vp.stake_entries.len(),
             )));
         }
@@ -125,7 +125,7 @@ where
             qc_vp
                 .stake_entries
                 .iter()
-                .zip(proof.iter())
+                .zip(signers.iter())
                 .fold(U256::zero(), |acc, (entry, b)| {
                     if *b {
                         acc + entry.stake_amount
@@ -140,12 +140,38 @@ where
             )));
         }
         let mut ver_keys = vec![];
-        for (entry, b) in qc_vp.stake_entries.iter().zip(proof.iter()) {
+        for (entry, b) in qc_vp.stake_entries.iter().zip(signers.iter()) {
             if *b {
                 ver_keys.push(entry.stake_key.clone());
             }
         }
         A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)
+    }
+
+    fn trace(
+        qc_vp: &Self::QCVerifierParams,
+        message: &GenericArray<<A>::MessageUnit, Self::MessageLength>,
+        qc: &Self::QC,
+    ) -> Result<Vec<<A>::VerificationKey>, PrimitivesError> {
+        let (_sig, signers) = qc;
+        if signers.len() != qc_vp.stake_entries.len() {
+            return Err(ParameterError(format!(
+                "signers bit vector len {} != the number of stake entries {}",
+                signers.len(),
+                qc_vp.stake_entries.len(),
+            )));
+        }
+
+        Self::check(qc_vp, message, qc)?;
+
+        let signer_pks: Vec<_> = qc_vp
+            .stake_entries
+            .iter()
+            .zip(signers.iter())
+            .filter(|(_, b)| **b)
+            .map(|(pk, _)| pk.stake_key.clone())
+            .collect();
+        Ok(signer_pks)
     }
 }
 
@@ -211,6 +237,10 @@ mod tests {
             )
             .unwrap();
             assert!(BitVectorQC::<$aggsig>::check(&qc_pp, &msg.into(), &qc).is_ok());
+            assert_eq!(
+                BitVectorQC::<$aggsig>::trace(&qc_pp, &msg.into(), &qc).unwrap(),
+                vec![key_pair2.ver_key(), key_pair3.ver_key()],
+            );
 
             // Check the QC and the QCParams can be serialized / deserialized
             assert_eq!(
