@@ -49,7 +49,6 @@ where
 
     type QC = (A::Signature, BitVec);
     type MessageLength = U32;
-    type CheckedType = ();
 
     fn sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
@@ -112,7 +111,7 @@ where
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<Self::CheckedType, PrimitivesError> {
+    ) -> Result<(), PrimitivesError> {
         let (sig, signers) = qc;
         if signers.len() != qc_vp.stake_entries.len() {
             return Err(ParameterError(format!(

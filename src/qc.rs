@@ -29,9 +29,6 @@ pub trait QuorumCertificate<A: AggregateableSignatureSchemes + Serialize + for<'
     /// Type of the actual quorum certificate object
     type QC;
 
-    /// Type of some auxiliary information returned by the check function in order to feed oth
-    type CheckedType;
-
     /// Produces a partial signature on a message with a single user signing key
     /// NOTE: the original message (vote) should be prefixed with the hash of the stake table.
     /// * `agg_sig_pp` - public parameters for aggregate signature
@@ -67,7 +64,7 @@ pub trait QuorumCertificate<A: AggregateableSignatureSchemes + Serialize + for<'
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<Self::CheckedType, PrimitivesError>;
+    ) -> Result<(), PrimitivesError>;
 
     /// Trace the list of signers given a qc.
     fn trace(
