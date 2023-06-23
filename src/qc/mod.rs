@@ -29,6 +29,9 @@ pub trait QuorumCertificate<A: AggregateableSignatureSchemes + Serialize + for<'
     /// Type of the actual quorum certificate object
     type QC;
 
+    /// Type of the quorum size (e.g. number of votes or accumulated weight of signatures)
+    type QuorumSize;
+
     /// Produces a partial signature on a message with a single user signing key
     /// NOTE: the original message (vote) should be prefixed with the hash of the stake table.
     /// * `agg_sig_pp` - public parameters for aggregate signature
@@ -59,12 +62,12 @@ pub trait QuorumCertificate<A: AggregateableSignatureSchemes + Serialize + for<'
     /// * `qc_vp` - public parameters for validating the QC
     /// * `message` - message to check the aggregated signature against
     /// * `qc` - quroum certificate
-    /// * `returns` - nothing if the signature is valid, an error otherwise.
+    /// * `returns` - the quorum size if the qc is valid, an error otherwise.
     fn check(
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<(), PrimitivesError>;
+    ) -> Result<Self::QuorumSize, PrimitivesError>;
 
     /// Trace the list of signers given a qc.
     fn trace(

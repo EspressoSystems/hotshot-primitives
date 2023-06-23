@@ -49,6 +49,7 @@ where
 
     type QC = (A::Signature, BitVec);
     type MessageLength = U32;
+    type QuorumSize = U256;
 
     fn sign<R: CryptoRng + RngCore>(
         agg_sig_pp: &A::PublicParameter,
@@ -111,7 +112,7 @@ where
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<(), PrimitivesError> {
+    ) -> Result<Self::QuorumSize, PrimitivesError> {
         let (sig, signers) = qc;
         if signers.len() != qc_vp.stake_entries.len() {
             return Err(ParameterError(format!(
@@ -144,7 +145,9 @@ where
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)
+        A::multi_sig_verify(&qc_vp.agg_sig_pp, &ver_keys[..], message, sig)?;
+
+        Ok(total_weight)
     }
 
     fn trace(
