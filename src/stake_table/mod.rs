@@ -5,10 +5,11 @@ use self::{
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
     collections::HashMap,
-    rand::{CryptoRng, RngCore},
+    rand::{CryptoRng, RngCore, SeedableRng},
     sync::Arc,
     vec::Vec,
 };
+use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
 use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
@@ -22,6 +23,93 @@ pub use utils::MerkleCommitment;
 pub use utils::MerklePath;
 pub use utils::MerklePathEntry;
 pub use utils::MerkleProof;
+
+/// Snapshots of the stake table
+/// - the latest "Head" where all new changes are applied to
+/// - `EpochStart` marks the snapshot at the beginning of the current epoch
+/// - `LastEpochStart` marks the beginning of the last epoch
+/// - `BlockNum(u64)` at arbitrary block height
+pub enum SnapshotVersion {
+    Head,
+    EpochStart,
+    LastEpochStart,
+    BlockNum(u64),
+}
+
+/// Common interfaces required for a stake table used in HotShot System.
+pub trait StakeTableScheme {
+    /// type for stake key
+    type Key;
+    /// type for the staked amount
+    type Amount;
+    /// type for the commitment to the current stake table
+    type Commitment;
+    /// Error type
+    type Error: ark_std::error::Error;
+
+    /// Register new keys into the stake table.
+    ///
+    /// # Status of registered keys
+    /// There are three states
+    fn register(&mut self, new_keys: &[Self::Key]) -> Result<(), Self::Error>;
+
+    /// Deregister existing keys from the stake table.
+    /// Returns error if some keys are not found.
+    fn deregister(&mut self, existing_keys: &[Self::Key]) -> Result<(), Self::Error>;
+
+    /// Returns the commitment to the current head of stake table.
+    fn commitment(&self) -> Self::Commitment;
+
+    /// Returns the total accumulated stakes of all registered keys.
+    fn total_stake(&self) -> Self::Amount;
+
+    /// Returns true if `key` is currently registered, else returns false.
+    fn contains_key(&self, key: &Self::Key) -> bool;
+
+    /// Lookup the stake under a key, returns error if keys unregistered.
+    fn lookup(&self, key: &Self::Key) -> Result<Self::Amount, Self::Error>;
+
+    /// Similar to [`Self::lookup()`], but against a specific historical `version`.
+    fn snapshot_lookup(
+        &self,
+        version: SnapshotVersion,
+        key: &Self::Key,
+    ) -> Result<Self::Amount, Self::Error>;
+
+    /// Update the stake under `key` by adding or substracting `amount` based on `negative` flag.
+    /// Returns the updated stake or error.
+    fn update(
+        &mut self,
+        key: &Self::Key,
+        amount: &Self::Amount,
+        negative: bool,
+    ) -> Result<Self::Amount, Self::Error>;
+
+    /// Batch update the stake balance of `keys`. Read documentation about [`Self::update()`].
+    /// By default, we call `Self::update()` on each (key, amount, negative) tuple.
+    fn batch_update(
+        &mut self,
+        keys: &[Self::Key],
+        amounts: &[Self::Amount],
+        negative_flags: Vec<bool>,
+    ) -> Result<Vec<Self::Amount>, Self::Error> {
+        let updated_amounts = keys
+            .iter()
+            .zip(amounts.iter())
+            .zip(negative_flags.iter())
+            .map(|((key, amount), negative)| Self::update(self, key, amount, *negative))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(updated_amounts)
+    }
+
+    /// Randomly sample a (key, stake_amount) pair proportional to the stake distributions,
+    /// given a fixed seed for `rng`, this sampling should be deterministic.
+    fn sample(
+        &self,
+        rng: impl SeedableRng + CryptoRngCore,
+    ) -> Result<(Self::Key, Self::Amount), Self::Error>;
+}
 
 /// Copied from HotShot repo.
 /// Type saftey wrapper for byte encoded keys.
