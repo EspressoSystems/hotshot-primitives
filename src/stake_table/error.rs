@@ -18,4 +18,8 @@ pub enum StakeTableError {
     InsufficientFund,
     /// The number of stake exceed U256
     StakeOverflow,
+    /// The historical snapshot requested is not supported.
+    SnapshotUnsupported,
 }
+
+impl ark_std::error::Error for StakeTableError {}

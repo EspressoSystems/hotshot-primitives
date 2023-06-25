@@ -3,12 +3,7 @@ use self::{
     utils::{to_merkle_path, PersistentMerkleNode},
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::{
-    collections::HashMap,
-    rand::{CryptoRng, RngCore, SeedableRng},
-    sync::Arc,
-    vec::Vec,
-};
+use ark_std::{collections::HashMap, rand::SeedableRng, sync::Arc, vec::Vec};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
 use serde::{Deserialize, Serialize};
@@ -37,51 +32,72 @@ pub enum SnapshotVersion {
 }
 
 /// Common interfaces required for a stake table used in HotShot System.
+/// APIs that doesn't take `version: SnapshotVersion` as an input by default works on the head/latest version.
 pub trait StakeTableScheme {
     /// type for stake key
-    type Key;
+    type Key: Clone;
     /// type for the staked amount
-    type Amount;
+    type Amount: Clone + Copy;
     /// type for the commitment to the current stake table
     type Commitment;
+    /// type for the proof associated with the lookup result (if any)
+    type LookupProof;
     /// Error type
     type Error: ark_std::error::Error;
 
-    /// Register new keys into the stake table.
-    ///
-    /// # Status of registered keys
-    /// There are three states
-    fn register(&mut self, new_keys: &[Self::Key]) -> Result<(), Self::Error>;
+    /// Register a new key into the stake table.
+    fn register(&mut self, new_key: Self::Key, amount: Self::Amount) -> Result<(), Self::Error>;
 
-    /// Deregister existing keys from the stake table.
+    /// Batch register a list of new keys. A default implementation is provided w/o batch optimization.
+    fn batch_register(
+        &mut self,
+        new_keys: Vec<Self::Key>,
+        amounts: Vec<Self::Amount>,
+    ) -> Result<(), Self::Error> {
+        let _ = new_keys
+            .into_iter()
+            .zip(amounts.into_iter())
+            .try_for_each(|(key, amount)| Self::register(self, key, amount));
+        Ok(())
+    }
+
+    /// Deregister an existing key from the stake table.
     /// Returns error if some keys are not found.
-    fn deregister(&mut self, existing_keys: &[Self::Key]) -> Result<(), Self::Error>;
+    fn deregister(&mut self, existing_key: &Self::Key) -> Result<(), Self::Error>;
 
-    /// Returns the commitment to the current head of stake table.
-    fn commitment(&self) -> Self::Commitment;
+    /// Batch deregister a list of keys. A default implementation is provided w/o batch optimization.
+    fn batch_deregister(&mut self, existing_keys: &[Self::Key]) -> Result<(), Self::Error> {
+        let _ = existing_keys
+            .iter()
+            .try_for_each(|key| Self::deregister(self, key));
+        Ok(())
+    }
 
-    /// Returns the total accumulated stakes of all registered keys.
-    fn total_stake(&self) -> Self::Amount;
+    /// Returns the commitment to the `version` of stake table.
+    fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, Self::Error>;
+
+    /// Returns the accumulated stakes of all registered keys of the `version` of stake table.
+    fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, Self::Error>;
+
+    /// Returns the number of keys in the `version` of the table.
+    fn len(&self, version: SnapshotVersion) -> Result<usize, Self::Error>;
 
     /// Returns true if `key` is currently registered, else returns false.
     fn contains_key(&self, key: &Self::Key) -> bool;
 
-    /// Lookup the stake under a key, returns error if keys unregistered.
-    fn lookup(&self, key: &Self::Key) -> Result<Self::Amount, Self::Error>;
-
-    /// Similar to [`Self::lookup()`], but against a specific historical `version`.
-    fn snapshot_lookup(
+    /// Lookup the stake under a key against a specific historical `version`, returns error if keys unregistered.
+    fn lookup(
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
-    ) -> Result<Self::Amount, Self::Error>;
+    ) -> Result<(Self::Amount, Self::LookupProof), Self::Error>;
 
-    /// Update the stake under `key` by adding or substracting `amount` based on `negative` flag.
-    /// Returns the updated stake or error.
+    /// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
+    /// Return the updated stake or error.
     fn update(
         &mut self,
         key: &Self::Key,
-        amount: &Self::Amount,
+        delta: Self::Amount,
         negative: bool,
     ) -> Result<Self::Amount, Self::Error>;
 
@@ -97,7 +113,7 @@ pub trait StakeTableScheme {
             .iter()
             .zip(amounts.iter())
             .zip(negative_flags.iter())
-            .map(|((key, amount), negative)| Self::update(self, key, amount, *negative))
+            .map(|((key, &amount), negative)| Self::update(self, key, amount, *negative))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(updated_amounts)
@@ -107,8 +123,8 @@ pub trait StakeTableScheme {
     /// given a fixed seed for `rng`, this sampling should be deterministic.
     fn sample(
         &self,
-        rng: impl SeedableRng + CryptoRngCore,
-    ) -> Result<(Self::Key, Self::Amount), Self::Error>;
+        rng: &mut (impl SeedableRng + CryptoRngCore),
+    ) -> Option<(&Self::Key, &Self::Amount)>;
 }
 
 /// Copied from HotShot repo.
@@ -119,16 +135,6 @@ pub trait StakeTableScheme {
     Clone, Debug, Hash, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub struct EncodedPublicKey(pub Vec<u8>);
-
-/// Enum type for stake table version
-///  * `STVersion::PENDING`: the most up-to-date stake table, where the incoming transactions shall be performed on.
-///  * `STVersion::FROZEN`: when an epoch ends, the PENDING stake table is frozen for leader elections for next epoch.
-///  * `STVersion::ACTIVE`: the active stake table for leader election.
-pub enum STVersion {
-    PENDING,
-    FROZEN,
-    ACTIVE,
-}
 
 /// Locally maintained stake table
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +154,112 @@ pub struct StakeTable {
     mapping: HashMap<EncodedPublicKey, usize>,
 }
 
+impl StakeTableScheme for StakeTable {
+    type Key = EncodedPublicKey;
+    type Amount = U256;
+    type Commitment = MerkleCommitment;
+    type LookupProof = MerkleProof;
+    type Error = StakeTableError;
+
+    fn register(&mut self, new_key: Self::Key, amount: Self::Amount) -> Result<(), Self::Error> {
+        match self.mapping.get(&new_key) {
+            Some(_) => Err(StakeTableError::ExistingKey),
+            None => {
+                let pos = self.mapping.len();
+                self.pending = self.pending.register(
+                    self.height,
+                    &to_merkle_path(pos, self.height),
+                    &new_key,
+                    amount,
+                )?;
+                self.mapping.insert(new_key, pos);
+                Ok(())
+            }
+        }
+    }
+
+    fn deregister(&mut self, _existing_key: &Self::Key) -> Result<(), Self::Error> {
+        // TODO: (alex) work on this in a future PR
+        unimplemented!()
+    }
+
+    fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, Self::Error> {
+        let root = Self::get_root(self, version)?;
+        Ok(MerkleCommitment::new(
+            root.commitment(),
+            self.height,
+            root.num_keys(),
+        ))
+    }
+
+    fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, Self::Error> {
+        let root = Self::get_root(self, version)?;
+        Ok(root.total_stakes())
+    }
+
+    fn len(&self, version: SnapshotVersion) -> Result<usize, Self::Error> {
+        let root = Self::get_root(self, version)?;
+        Ok(root.num_keys())
+    }
+
+    fn contains_key(&self, key: &Self::Key) -> bool {
+        self.mapping.contains_key(key)
+    }
+
+    fn lookup(
+        &self,
+        version: SnapshotVersion,
+        key: &Self::Key,
+    ) -> Result<(Self::Amount, Self::LookupProof), Self::Error> {
+        let root = Self::get_root(self, version)?;
+
+        let proof = match self.mapping.get(key) {
+            Some(index) => {
+                let branches = to_merkle_path(*index, self.height);
+                root.lookup(self.height, &branches)
+            }
+            None => Err(StakeTableError::KeyNotFound),
+        }?;
+        let amount = *proof.get_value().ok_or(StakeTableError::KeyNotFound)?;
+        Ok((amount, proof))
+    }
+
+    fn update(
+        &mut self,
+        key: &Self::Key,
+        delta: Self::Amount,
+        negative: bool,
+    ) -> Result<Self::Amount, Self::Error> {
+        match self.mapping.get(key) {
+            Some(pos) => {
+                let value: U256;
+                (self.pending, value) = self.pending.update(
+                    self.height,
+                    &to_merkle_path(*pos, self.height),
+                    key,
+                    delta,
+                    negative,
+                )?;
+                Ok(value)
+            }
+            None => Err(StakeTableError::KeyNotFound),
+        }
+    }
+
+    /// Almost uniformly samples a key weighted by its stake from the active stake table
+    fn sample(
+        &self,
+        rng: &mut (impl SeedableRng + CryptoRngCore),
+    ) -> Option<(&Self::Key, &Self::Amount)> {
+        let mut bytes = [0u8; 64];
+        rng.fill_bytes(&mut bytes);
+        let r = U512::from_big_endian(&bytes);
+        let m = U512::from(self.active.total_stakes());
+        let pos: U256 = (r % m).try_into().unwrap(); // won't fail
+        self.active.get_key_by_stake(pos)
+    }
+}
+
 impl StakeTable {
     /// Initiating an empty stake table.
     /// Overall capacity is `TREE_BRANCH.pow(height)`.
@@ -161,90 +273,23 @@ impl StakeTable {
         }
     }
 
+    // returns the root of stake table at `version`
+    fn get_root(
+        &self,
+        version: SnapshotVersion,
+    ) -> Result<Arc<PersistentMerkleNode>, StakeTableError> {
+        match version {
+            SnapshotVersion::Head => Ok(Arc::clone(&self.pending)),
+            SnapshotVersion::EpochStart => Ok(Arc::clone(&self.frozen)),
+            SnapshotVersion::LastEpochStart => Ok(Arc::clone(&self.active)),
+            SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
+        }
+    }
+
     /// Update the stake table when the epoch number advances, should be manually called.
     pub fn advance(&mut self) {
         self.active = self.frozen.clone();
         self.frozen = self.pending.clone();
-    }
-
-    /// Returns the number of stakes holding by the input key for a specific stake table version
-    pub fn simple_lookup(
-        &self,
-        version: STVersion,
-        key: &EncodedPublicKey,
-    ) -> Result<U256, StakeTableError> {
-        let root = match version {
-            STVersion::PENDING => &self.pending,
-            STVersion::FROZEN => &self.frozen,
-            STVersion::ACTIVE => &self.active,
-        };
-        match self.mapping.get(key) {
-            Some(index) => {
-                let branches = to_merkle_path(*index, self.height);
-                root.simple_lookup(self.height, &branches)
-            }
-            None => Err(StakeTableError::KeyNotFound),
-        }
-    }
-
-    /// Returns a membership proof for the input key for a specific stake table version
-    pub fn lookup(
-        &self,
-        version: STVersion,
-        key: &EncodedPublicKey,
-    ) -> Result<MerkleProof, StakeTableError> {
-        let root = match version {
-            STVersion::PENDING => &self.pending,
-            STVersion::FROZEN => &self.frozen,
-            STVersion::ACTIVE => &self.active,
-        };
-        match self.mapping.get(key) {
-            Some(index) => {
-                let branches = to_merkle_path(*index, self.height);
-                root.lookup(self.height, &branches)
-            }
-            None => Err(StakeTableError::KeyNotFound),
-        }
-    }
-
-    /// Returns a succint commitment for a specific stake table version
-    pub fn commitment(&self, version: STVersion) -> MerkleCommitment {
-        let root = match version {
-            STVersion::PENDING => &self.pending,
-            STVersion::FROZEN => &self.frozen,
-            STVersion::ACTIVE => &self.active,
-        };
-        MerkleCommitment::new(root.commitment(), self.height, root.num_keys())
-    }
-
-    /// Returns the total amount of stakes for a specific stake table version
-    pub fn total_stakes(&self, version: STVersion) -> U256 {
-        let root = match version {
-            STVersion::PENDING => &self.pending,
-            STVersion::FROZEN => &self.frozen,
-            STVersion::ACTIVE => &self.active,
-        };
-        root.total_stakes()
-    }
-
-    /// Returns the number of keys for a specific stake table version
-    pub fn num_keys(&self, version: STVersion) -> usize {
-        let root = match version {
-            STVersion::PENDING => &self.pending,
-            STVersion::FROZEN => &self.frozen,
-            STVersion::ACTIVE => &self.active,
-        };
-        root.num_keys()
-    }
-
-    /// Almost uniformly samples a key weighted by its stake from the active stake table
-    pub fn sample_key_by_stake<R: CryptoRng + RngCore>(&self, rng: &mut R) -> &EncodedPublicKey {
-        let mut bytes = [0u8; 64];
-        rng.fill_bytes(&mut bytes);
-        let r = U512::from_big_endian(&bytes);
-        let m = U512::from(self.active.total_stakes());
-        let pos: U256 = (r % m).try_into().unwrap();
-        self.active.get_key_by_stake(pos).unwrap()
     }
 
     /// Set the stake withheld by `key` to be `value`.
@@ -269,73 +314,53 @@ impl StakeTable {
         }
     }
 
-    /// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
-    /// Return the updated stake
-    pub fn update(
-        &mut self,
+    /// Returns the stakes withhelded by a public key, None if the key is not registered.
+    /// If you need a lookup proof, use [`Self::lookup()`] instead.
+    pub fn simple_lookup(
+        &self,
+        version: SnapshotVersion,
         key: &EncodedPublicKey,
-        delta: U256,
-        negative: bool,
     ) -> Result<U256, StakeTableError> {
+        let root = Self::get_root(self, version)?;
         match self.mapping.get(key) {
-            Some(pos) => {
-                let value: U256;
-                (self.pending, value) = self.pending.update(
-                    self.height,
-                    &to_merkle_path(*pos, self.height),
-                    key,
-                    delta,
-                    negative,
-                )?;
-                Ok(value)
+            Some(index) => {
+                let branches = to_merkle_path(*index, self.height);
+                root.simple_lookup(self.height, &branches)
             }
             None => Err(StakeTableError::KeyNotFound),
-        }
-    }
-
-    /// Register a new key from the pending stake table
-    pub fn register(&mut self, key: &EncodedPublicKey, value: U256) -> Result<(), StakeTableError> {
-        match self.mapping.get(key) {
-            Some(_) => Err(StakeTableError::ExistingKey),
-            None => {
-                let pos = self.mapping.len();
-                self.mapping.insert(key.clone(), pos);
-                self.pending = self.pending.register(
-                    self.height,
-                    &to_merkle_path(pos, self.height),
-                    key,
-                    value,
-                )?;
-                Ok(())
-            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::stake_table::STVersion;
-
-    use super::{config::FieldType, EncodedPublicKey, StakeTable};
+    use super::{
+        config::FieldType, error::StakeTableError, EncodedPublicKey, SnapshotVersion, StakeTable,
+        StakeTableScheme,
+    };
+    use ark_std::rand::SeedableRng;
     use ark_std::vec::Vec;
     use ethereum_types::U256;
     use jf_utils::to_bytes;
 
     #[test]
-    fn test_stake_table() {
+    fn test_stake_table() -> Result<(), StakeTableError> {
         let mut st = StakeTable::new(3);
         let keys = (0..10)
             .map(|i| EncodedPublicKey(to_bytes!(&FieldType::from(i)).unwrap()))
             .collect::<Vec<_>>();
-        assert_eq!(st.total_stakes(STVersion::PENDING), U256::from(0));
+        assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(0));
 
         // Registering keys
         keys.iter()
             .take(4)
-            .for_each(|key| st.register(key, U256::from(100)).unwrap());
-        assert_eq!(st.total_stakes(STVersion::PENDING), U256::from(400));
-        assert_eq!(st.total_stakes(STVersion::FROZEN), U256::from(0));
-        assert_eq!(st.total_stakes(STVersion::ACTIVE), U256::from(0));
+            .for_each(|key| st.register(key.clone(), U256::from(100)).unwrap());
+        assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(400));
+        assert_eq!(st.total_stake(SnapshotVersion::EpochStart)?, U256::from(0));
+        assert_eq!(
+            st.total_stake(SnapshotVersion::LastEpochStart)?,
+            U256::from(0)
+        );
         // set to zero for futher sampling test
         assert_eq!(
             st.set_value(&keys[1], U256::from(0)).unwrap(),
@@ -345,34 +370,51 @@ mod tests {
         keys.iter()
             .skip(4)
             .take(3)
-            .for_each(|key| st.register(key, U256::from(100)).unwrap());
-        assert_eq!(st.total_stakes(STVersion::PENDING), U256::from(600));
-        assert_eq!(st.total_stakes(STVersion::FROZEN), U256::from(300));
-        assert_eq!(st.total_stakes(STVersion::ACTIVE), U256::from(0));
+            .for_each(|key| st.register(key.clone(), U256::from(100)).unwrap());
+        assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(600));
+        assert_eq!(
+            st.total_stake(SnapshotVersion::EpochStart)?,
+            U256::from(300)
+        );
+        assert_eq!(
+            st.total_stake(SnapshotVersion::LastEpochStart)?,
+            U256::from(0)
+        );
         st.advance();
         keys.iter()
             .skip(7)
-            .for_each(|key| st.register(key, U256::from(100)).unwrap());
-        assert_eq!(st.total_stakes(STVersion::PENDING), U256::from(900));
-        assert_eq!(st.total_stakes(STVersion::FROZEN), U256::from(600));
-        assert_eq!(st.total_stakes(STVersion::ACTIVE), U256::from(300));
+            .for_each(|key| st.register(key.clone(), U256::from(100)).unwrap());
+        assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(900));
+        assert_eq!(
+            st.total_stake(SnapshotVersion::EpochStart)?,
+            U256::from(600)
+        );
+        assert_eq!(
+            st.total_stake(SnapshotVersion::LastEpochStart)?,
+            U256::from(300)
+        );
 
         // No duplicate register
-        assert!(st.register(&keys[0], U256::from(100)).is_err());
+        assert!(st.register(keys[0].clone(), U256::from(100)).is_err());
         // The 9-th key is still in pending stake table
-        assert!(st.simple_lookup(STVersion::FROZEN, &keys[9]).is_err());
-        assert!(st.simple_lookup(STVersion::FROZEN, &keys[5]).is_ok());
+        assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9]).is_err());
+        assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5]).is_ok());
         // The 6-th key is still frozen
-        assert!(st.simple_lookup(STVersion::ACTIVE, &keys[6]).is_err());
-        assert!(st.simple_lookup(STVersion::ACTIVE, &keys[2]).is_ok());
+        assert!(st
+            .lookup(SnapshotVersion::LastEpochStart, &keys[6])
+            .is_err());
+        assert!(st.lookup(SnapshotVersion::LastEpochStart, &keys[2]).is_ok());
 
         // Set value shall return the old value
         assert_eq!(
             st.set_value(&keys[0], U256::from(101)).unwrap(),
             U256::from(100)
         );
-        assert_eq!(st.total_stakes(STVersion::PENDING), U256::from(901));
-        assert_eq!(st.total_stakes(STVersion::FROZEN), U256::from(600));
+        assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(901));
+        assert_eq!(
+            st.total_stake(SnapshotVersion::EpochStart)?,
+            U256::from(600)
+        );
 
         // Update that results in a negative stake
         assert!(st.update(&keys[0], U256::from(1000), true).is_err());
@@ -387,18 +429,26 @@ mod tests {
         );
 
         // Testing membership proof
-        let proof = st.lookup(STVersion::FROZEN, &keys[5]).unwrap();
-        assert!(proof.verify(&st.commitment(STVersion::FROZEN)).is_ok());
+        let proof = st.lookup(SnapshotVersion::EpochStart, &keys[5])?.1;
+        assert!(proof
+            .verify(&st.commitment(SnapshotVersion::EpochStart)?)
+            .is_ok());
         // Membership proofs are tied with a specific version
-        assert!(proof.verify(&st.commitment(STVersion::PENDING)).is_err());
-        assert!(proof.verify(&st.commitment(STVersion::ACTIVE)).is_err());
+        assert!(proof
+            .verify(&st.commitment(SnapshotVersion::Head)?)
+            .is_err());
+        assert!(proof
+            .verify(&st.commitment(SnapshotVersion::LastEpochStart)?)
+            .is_err());
 
         // Random test for sampling keys
-        let mut rng = jf_utils::test_rng();
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(41u64);
         for _ in 0..100 {
-            let key = st.sample_key_by_stake(&mut rng);
+            let (_key, value) = st.sample(&mut rng).unwrap();
             // Sampled keys should have positive stake
-            assert!(st.simple_lookup(STVersion::ACTIVE, key).unwrap() > U256::from(0));
+            assert!(value > &U256::from(0));
         }
+
+        Ok(())
     }
 }

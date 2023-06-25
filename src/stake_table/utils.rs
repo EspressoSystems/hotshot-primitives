@@ -274,7 +274,7 @@ impl PersistentMerkleNode {
     /// Imagine that the keys in this subtree is sorted, returns the first key such that
     /// the prefix sum of withholding stakes is greater or equal the given `stake_number`.
     /// Useful for key sampling weighted by withholding stakes
-    pub fn get_key_by_stake(&self, mut stake_number: U256) -> Option<&EncodedPublicKey> {
+    pub fn get_key_by_stake(&self, mut stake_number: U256) -> Option<(&EncodedPublicKey, &U256)> {
         if stake_number >= self.total_stakes() {
             None
         } else {
@@ -296,8 +296,8 @@ impl PersistentMerkleNode {
                 PersistentMerkleNode::Leaf {
                     comm: _,
                     key,
-                    value: _,
-                } => Some(key),
+                    value,
+                } => Some((key, value)),
             }
         }
     }
@@ -573,6 +573,7 @@ mod tests {
                     .unwrap()
                     .get_key_by_stake(U256::from(i as u64 * 100 + i as u64 + 1))
                     .unwrap()
+                    .0
             );
         });
 
