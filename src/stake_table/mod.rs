@@ -140,11 +140,11 @@ pub struct EncodedPublicKey(pub Vec<u8>);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StakeTable {
     /// The most up-to-date stake table, where the incoming transactions shall be performed on.
-    pending: Arc<PersistentMerkleNode>,
-    /// When an epoch ends, the PENDING stake table is frozen for leader elections for next epoch.
-    frozen: Arc<PersistentMerkleNode>,
-    /// The active stake table for leader election.
-    active: Arc<PersistentMerkleNode>,
+    head: Arc<PersistentMerkleNode>,
+    /// The snapshot of stake table at the beginning of the current epoch
+    epoch_start: Arc<PersistentMerkleNode>,
+    /// The stake table used for leader election.
+    last_epoch_start: Arc<PersistentMerkleNode>,
 
     /// Height of the underlying merkle tree, determines the capacity.
     /// The capacity is `TREE_BRANCH.pow(height)`.
@@ -166,7 +166,7 @@ impl StakeTableScheme for StakeTable {
             Some(_) => Err(StakeTableError::ExistingKey),
             None => {
                 let pos = self.mapping.len();
-                self.pending = self.pending.register(
+                self.head = self.head.register(
                     self.height,
                     &to_merkle_path(pos, self.height),
                     &new_key,
@@ -233,7 +233,7 @@ impl StakeTableScheme for StakeTable {
         match self.mapping.get(key) {
             Some(pos) => {
                 let value: U256;
-                (self.pending, value) = self.pending.update(
+                (self.head, value) = self.head.update(
                     self.height,
                     &to_merkle_path(*pos, self.height),
                     key,
@@ -246,7 +246,7 @@ impl StakeTableScheme for StakeTable {
         }
     }
 
-    /// Almost uniformly samples a key weighted by its stake from the active stake table
+    /// Almost uniformly samples a key weighted by its stake from the last_epoch_start stake table
     fn sample(
         &self,
         rng: &mut (impl SeedableRng + CryptoRngCore),
@@ -254,9 +254,9 @@ impl StakeTableScheme for StakeTable {
         let mut bytes = [0u8; 64];
         rng.fill_bytes(&mut bytes);
         let r = U512::from_big_endian(&bytes);
-        let m = U512::from(self.active.total_stakes());
+        let m = U512::from(self.last_epoch_start.total_stakes());
         let pos: U256 = (r % m).try_into().unwrap(); // won't fail
-        self.active.get_key_by_stake(pos)
+        self.last_epoch_start.get_key_by_stake(pos)
     }
 }
 
@@ -265,9 +265,9 @@ impl StakeTable {
     /// Overall capacity is `TREE_BRANCH.pow(height)`.
     pub fn new(height: usize) -> Self {
         Self {
-            pending: Arc::new(PersistentMerkleNode::Empty),
-            frozen: Arc::new(PersistentMerkleNode::Empty),
-            active: Arc::new(PersistentMerkleNode::Empty),
+            head: Arc::new(PersistentMerkleNode::Empty),
+            epoch_start: Arc::new(PersistentMerkleNode::Empty),
+            last_epoch_start: Arc::new(PersistentMerkleNode::Empty),
             height,
             mapping: HashMap::new(),
         }
@@ -279,17 +279,17 @@ impl StakeTable {
         version: SnapshotVersion,
     ) -> Result<Arc<PersistentMerkleNode>, StakeTableError> {
         match version {
-            SnapshotVersion::Head => Ok(Arc::clone(&self.pending)),
-            SnapshotVersion::EpochStart => Ok(Arc::clone(&self.frozen)),
-            SnapshotVersion::LastEpochStart => Ok(Arc::clone(&self.active)),
+            SnapshotVersion::Head => Ok(Arc::clone(&self.head)),
+            SnapshotVersion::EpochStart => Ok(Arc::clone(&self.epoch_start)),
+            SnapshotVersion::LastEpochStart => Ok(Arc::clone(&self.last_epoch_start)),
             SnapshotVersion::BlockNum(_) => Err(StakeTableError::SnapshotUnsupported),
         }
     }
 
     /// Update the stake table when the epoch number advances, should be manually called.
     pub fn advance(&mut self) {
-        self.active = self.frozen.clone();
-        self.frozen = self.pending.clone();
+        self.last_epoch_start = self.epoch_start.clone();
+        self.epoch_start = self.head.clone();
     }
 
     /// Set the stake withheld by `key` to be `value`.
@@ -302,7 +302,7 @@ impl StakeTable {
         match self.mapping.get(key) {
             Some(pos) => {
                 let old_value: U256;
-                (self.pending, old_value) = self.pending.set_value(
+                (self.head, old_value) = self.head.set_value(
                     self.height,
                     &to_merkle_path(*pos, self.height),
                     key,
@@ -396,7 +396,7 @@ mod tests {
 
         // No duplicate register
         assert!(st.register(keys[0].clone(), U256::from(100)).is_err());
-        // The 9-th key is still in pending stake table
+        // The 9-th key is still in head stake table
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9]).is_err());
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5]).is_ok());
         // The 6-th key is still frozen
