@@ -9,7 +9,7 @@ use jf_primitives::{circuit::rescue::RescueNativeGadget, rescue::RescueParameter
 use jf_relation::{
     errors::CircuitError,
     gadgets::{
-        ecc::{emulated::EmulatedTEPointVariable, SWToTEConParam, TEPoint},
+        ecc::emulated::{EmulatedSWPointVariable, SWPoint},
         EmulationConfig,
     },
     BoolVar, Circuit, PlonkCircuit, Variable,
@@ -17,11 +17,12 @@ use jf_relation::{
 
 #[derive(Debug, Clone)]
 /// Stake public key variable
-/// Wrap EmulatedPointVariable because we need to simulate curve operations over the same curve's scalar field
-pub struct VerKeyVar<E: PrimeField>(pub EmulatedTEPointVariable<E>);
+/// Wrap EmulatedSWPointVariable because we need to simulate curve operations over the same curve's scalar field
+pub struct VerKeySWVar<E: PrimeField>(pub EmulatedSWPointVariable<E>);
 
 /// Plonk circuit gadget for stake key aggregation for quorum certificates.
-pub trait QCKeyAggregateGadget<F>
+/// Assuming that the underlying key composes of a short Weierstrass curve point.
+pub trait QCKeyAggregateSWGadget<F>
 where
     F: RescueParameter,
 {
@@ -29,13 +30,13 @@ where
     /// * `vks` - list of stake public keys.
     /// * `bit_vec` - the indicator vector for the quorum set, `bit_vec[i] = 1` if `i` is in the quorum set, o/w `bit_vec[i] = 0`.
     /// * `agg_vk` - the public aggregated stake key.
-    /// * `d_ecc` - the twisted Edward curve parameter for the simulated curve
-    fn check_aggregate_vk<E: EmulationConfig<F> + SWToTEConParam, P: SWCurveConfig<BaseField = E>>(
+    /// * `d_ecc` - the short Weierstrass curve parameter for the simulated curve
+    fn check_aggregate_vk<E: EmulationConfig<F>, P: SWCurveConfig<BaseField = E>>(
         &mut self,
-        vks: &[VerKeyVar<E>],
+        vks: &[VerKeySWVar<E>],
         bit_vec: &[BoolVar],
-        agg_vk: &VerKeyVar<E>,
-        d_ecc: E,
+        agg_vk: &VerKeySWVar<E>,
+        a_ecc: E,
     ) -> Result<(), CircuitError>;
 
     /// Stake table commitment checking circuit
@@ -44,7 +45,7 @@ where
     /// * `digest` - the hash of the stake table.
     fn check_stake_table_digest<E: EmulationConfig<F>>(
         &mut self,
-        vks: &[VerKeyVar<E>],
+        vks: &[VerKeySWVar<E>],
         stake_amts: &[Variable],
         digest: Variable,
     ) -> Result<(), CircuitError>;
@@ -61,19 +62,16 @@ where
     ) -> Result<(), CircuitError>;
 }
 
-impl<F> QCKeyAggregateGadget<F> for PlonkCircuit<F>
+impl<F> QCKeyAggregateSWGadget<F> for PlonkCircuit<F>
 where
     F: RescueParameter,
 {
-    fn check_aggregate_vk<
-        E: EmulationConfig<F> + SWToTEConParam,
-        P: SWCurveConfig<BaseField = E>,
-    >(
+    fn check_aggregate_vk<E: EmulationConfig<F>, P: SWCurveConfig<BaseField = E>>(
         &mut self,
-        vks: &[VerKeyVar<E>],
+        vks: &[VerKeySWVar<E>],
         bit_vec: &[BoolVar],
-        agg_vk: &VerKeyVar<E>,
-        d_ecc: E,
+        agg_vk: &VerKeySWVar<E>,
+        a_ecc: E,
     ) -> Result<(), CircuitError> {
         if vks.len() != bit_vec.len() {
             return Err(CircuitError::ParameterError(format!(
@@ -82,22 +80,22 @@ where
                 vks.len(),
             )));
         }
-        let neutral_point: TEPoint<E> = Projective::<P>::zero().into_affine().into();
+        let neutral_point: SWPoint<E> = Projective::<P>::zero().into_affine().into();
         let emulated_neutral_point_var =
-            self.create_constant_emulated_te_point_variable(neutral_point)?;
+            self.create_constant_emulated_sw_point_variable(neutral_point)?;
         let mut expect_agg_point_var = emulated_neutral_point_var.clone();
         for (vk, &bit) in vks.iter().zip(bit_vec.iter()) {
             let point_var =
-                self.binary_emulated_te_point_vars_select(bit, &emulated_neutral_point_var, &vk.0)?;
+                self.binary_emulated_sw_point_vars_select(bit, &emulated_neutral_point_var, &vk.0)?;
             expect_agg_point_var =
-                self.emulated_te_ecc_add::<E>(&expect_agg_point_var, &point_var, d_ecc)?;
+                self.emulated_sw_ecc_add::<E>(&expect_agg_point_var, &point_var, a_ecc)?;
         }
-        self.enforce_emulated_te_point_equal(&expect_agg_point_var, &agg_vk.0)
+        self.enforce_emulated_sw_point_equal(&expect_agg_point_var, &agg_vk.0)
     }
 
     fn check_stake_table_digest<E: EmulationConfig<F>>(
         &mut self,
-        vks: &[VerKeyVar<E>],
+        vks: &[VerKeySWVar<E>],
         stake_amts: &[Variable],
         digest: Variable,
     ) -> Result<(), CircuitError> {
@@ -112,6 +110,7 @@ where
         for (vk, &stake_amt) in vks.iter().zip(stake_amts.iter()) {
             hash_input.append(&mut vk.0 .0.to_vec());
             hash_input.append(&mut vk.0 .1.to_vec());
+            hash_input.push(vk.0 .2 .0);
             hash_input.push(stake_amt);
         }
         let expected_digest =
@@ -145,27 +144,25 @@ where
 mod tests {
     use super::*;
     use ark_bls12_377::{g1::Config as Param377, Fq as Fq377};
-    use ark_bn254::Fr as Fr254;
-    use ark_ff::MontFp;
+    use ark_bn254::{g1::Config as Param254, Fq as Fq254, Fr as Fr254};
     use ark_std::{vec::Vec, UniformRand};
     use jf_primitives::rescue::sponge::RescueCRHF;
     use jf_relation::{
-        errors::CircuitError,
-        gadgets::{ecc::SWToTEConParam, from_emulated_field},
-        Circuit, PlonkCircuit, Variable,
+        errors::CircuitError, gadgets::SerializableEmulatedStruct, Circuit, PlonkCircuit, Variable,
     };
 
     #[test]
     fn test_vk_aggregate_circuit() -> Result<(), CircuitError> {
-        let d_ecc : Fq377 = MontFp!("122268283598675559488486339158635529096981886914877139579534153582033676785385790730042363341236035746924960903179");
-        test_vk_aggregate_circuit_helper::<Fq377, Fr254, Param377>(d_ecc)
+        let a_ecc = Fq377::zero();
+        test_vk_aggregate_circuit_helper::<Fq377, Fr254, Param377>(a_ecc)?;
+        let a_ecc = Fq254::zero();
+        test_vk_aggregate_circuit_helper::<Fq254, Fr254, Param254>(a_ecc)
     }
 
     // TODO: use Aggregate signature APIs to aggregate the keys outside the circuit
-    // TODO: use BN curve base field
-    fn test_vk_aggregate_circuit_helper<E, F, P>(d_ecc: E) -> Result<(), CircuitError>
+    fn test_vk_aggregate_circuit_helper<E, F, P>(a_ecc: E) -> Result<(), CircuitError>
     where
-        E: EmulationConfig<F> + SWToTEConParam,
+        E: EmulationConfig<F>,
         F: RescueParameter,
         P: SWCurveConfig<BaseField = E>,
     {
@@ -187,23 +184,23 @@ mod tests {
                         }
                     },
                 );
-        let agg_vk_point: TEPoint<E> = agg_vk_point.into_affine().into();
-        let vk_points: Vec<TEPoint<E>> = vk_points.iter().map(|p| p.into_affine().into()).collect();
+        let agg_vk_point: SWPoint<E> = agg_vk_point.into_affine().into();
+        let vk_points: Vec<SWPoint<E>> = vk_points.iter().map(|p| p.into_affine().into()).collect();
         let stake_amts: Vec<F> = (0..5).map(|i| F::from((i + 1) as u32)).collect();
         let threshold = F::from(6u8);
         let digest = compute_stake_table_hash::<F, E>(&stake_amts[..], &vk_points[..]);
 
-        let mut circuit = PlonkCircuit::<F>::new_turbo_plonk();
+        let mut circuit = PlonkCircuit::<F>::new_ultra_plonk(20);
         // public input
         // TODO: make variables public?
-        let agg_vk_var = VerKeyVar(circuit.create_emulated_te_point_variable(agg_vk_point)?);
+        let agg_vk_var = VerKeySWVar(circuit.create_emulated_sw_point_variable(agg_vk_point)?);
         let threshold_var = circuit.create_variable(threshold)?;
         let digest_var = circuit.create_variable(digest)?;
 
         // add witness
-        let vk_vars: Vec<VerKeyVar<E>> = vk_points
+        let vk_vars: Vec<VerKeySWVar<E>> = vk_points
             .iter()
-            .map(|&p| VerKeyVar(circuit.create_emulated_te_point_variable(p).unwrap()))
+            .map(|&p| VerKeySWVar(circuit.create_emulated_sw_point_variable(p).unwrap()))
             .collect();
         let stake_amt_vars: Vec<Variable> = stake_amts
             .iter()
@@ -214,7 +211,7 @@ mod tests {
             .map(|&b| circuit.create_boolean_variable(b).unwrap())
             .collect();
         // add circuit gadgets
-        circuit.check_aggregate_vk::<E, P>(&vk_vars[..], &bitvec_vars[..], &agg_vk_var, d_ecc)?;
+        circuit.check_aggregate_vk::<E, P>(&vk_vars[..], &bitvec_vars[..], &agg_vk_var, a_ecc)?;
         circuit.check_stake_table_digest(&vk_vars[..], &stake_amt_vars[..], digest_var)?;
         circuit.check_threshold(&stake_amt_vars[..], &bitvec_vars[..], threshold_var)?;
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
@@ -238,7 +235,7 @@ mod tests {
 
         // check input parameter errors
         assert!(circuit
-            .check_aggregate_vk::<E, P>(&vk_vars[..], &bitvec_vars[1..], &agg_vk_var, d_ecc)
+            .check_aggregate_vk::<E, P>(&vk_vars[..], &bitvec_vars[1..], &agg_vk_var, a_ecc)
             .is_err());
         assert!(circuit
             .check_stake_table_digest(&vk_vars[..], &stake_amt_vars[1..], digest_var)
@@ -253,14 +250,11 @@ mod tests {
     // TODO(binyi): make the API public
     fn compute_stake_table_hash<F: RescueParameter, E: EmulationConfig<F>>(
         stake_amts: &[F],
-        vk_points: &[TEPoint<E>],
+        vk_points: &[SWPoint<E>],
     ) -> F {
         let mut input_vec = vec![];
         for (&amt, point) in stake_amts.iter().zip(vk_points.iter()) {
-            let x_vec = from_emulated_field(point.get_x());
-            let y_vec = from_emulated_field(point.get_y());
-            input_vec.extend(x_vec);
-            input_vec.extend(y_vec);
+            input_vec.extend(point.serialize_to_native_elements());
             input_vec.push(amt);
         }
         RescueCRHF::sponge_with_bit_padding(&input_vec[..], 1)[0]
