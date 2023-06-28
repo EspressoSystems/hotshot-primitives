@@ -30,7 +30,7 @@ where
     /// * `vks` - list of stake public keys.
     /// * `bit_vec` - the indicator vector for the quorum set, `bit_vec[i] = 1` if `i` is in the quorum set, o/w `bit_vec[i] = 0`.
     /// * `agg_vk` - the public aggregated stake key.
-    /// * `d_ecc` - the short Weierstrass curve parameter for the simulated curve
+    /// * `a_ecc` - the short Weierstrass curve parameter for the simulated curve
     fn check_aggregate_vk<E: EmulationConfig<F>, P: SWCurveConfig<BaseField = E>>(
         &mut self,
         vks: &[VerKeySWVar<E>],
