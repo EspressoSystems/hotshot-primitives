@@ -152,15 +152,15 @@ mod tests {
     };
 
     #[test]
-    fn test_vk_aggregate_circuit() -> Result<(), CircuitError> {
+    fn test_vk_aggregate_sw_circuit() -> Result<(), CircuitError> {
         let a_ecc = Fq377::zero();
-        test_vk_aggregate_circuit_helper::<Fq377, Fr254, Param377>(a_ecc)?;
+        test_vk_aggregate_sw_circuit_helper::<Fq377, Fr254, Param377>(a_ecc)?;
         let a_ecc = Fq254::zero();
-        test_vk_aggregate_circuit_helper::<Fq254, Fr254, Param254>(a_ecc)
+        test_vk_aggregate_sw_circuit_helper::<Fq254, Fr254, Param254>(a_ecc)
     }
 
     // TODO: use Aggregate signature APIs to aggregate the keys outside the circuit
-    fn test_vk_aggregate_circuit_helper<E, F, P>(a_ecc: E) -> Result<(), CircuitError>
+    fn test_vk_aggregate_sw_circuit_helper<E, F, P>(a_ecc: E) -> Result<(), CircuitError>
     where
         E: EmulationConfig<F>,
         F: RescueParameter,

@@ -157,13 +157,13 @@ mod tests {
     };
 
     #[test]
-    fn test_vk_aggregate_circuit() -> Result<(), CircuitError> {
+    fn test_vk_aggregate_te_circuit() -> Result<(), CircuitError> {
         let d_ecc : Fq377 = MontFp!("122268283598675559488486339158635529096981886914877139579534153582033676785385790730042363341236035746924960903179");
-        test_vk_aggregate_circuit_helper::<Fq377, Fr254, Param377>(d_ecc)
+        test_vk_aggregate_te_circuit_helper::<Fq377, Fr254, Param377>(d_ecc)
     }
 
     // TODO: use Aggregate signature APIs to aggregate the keys outside the circuit
-    fn test_vk_aggregate_circuit_helper<E, F, P>(d_ecc: E) -> Result<(), CircuitError>
+    fn test_vk_aggregate_te_circuit_helper<E, F, P>(d_ecc: E) -> Result<(), CircuitError>
     where
         E: EmulationConfig<F> + SWToTEConParam,
         F: RescueParameter,
