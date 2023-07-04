@@ -503,6 +503,68 @@ impl PersistentMerkleNode {
     }
 }
 
+/// An owning iterator over the (key, value) entries of a `PersistentMerkleNode`
+/// Traverse using post-order: children from left to right, finally visit the current.
+pub struct IntoIter {
+    unvisited: Vec<Arc<PersistentMerkleNode>>,
+    num_visited: usize,
+}
+
+impl IntoIter {
+    /// create a new merkle tree iterator from a `root`.
+    /// This (abstract) `root` can be an internal node of a larger tree, our iterator
+    /// will iterate over all of its children.
+    pub(crate) fn new(root: Arc<PersistentMerkleNode>) -> Self {
+        Self {
+            unvisited: vec![root],
+            num_visited: 0,
+        }
+    }
+}
+
+impl Iterator for IntoIter {
+    type Item = (EncodedPublicKey, U256);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.unvisited.is_empty() {
+            return None;
+        }
+
+        let visiting = (**self.unvisited.last()?).clone();
+        match visiting {
+            PersistentMerkleNode::Empty => None,
+            PersistentMerkleNode::Leaf {
+                comm: _,
+                key,
+                value,
+            } => {
+                self.unvisited.pop();
+                self.num_visited += 1;
+                Some((key, value))
+            }
+            PersistentMerkleNode::Branch {
+                comm: _,
+                children,
+                num_keys: _,
+                total_stakes: _,
+            } => {
+                self.unvisited.pop();
+                // put the left-most child to the last, so it is visited first.
+                self.unvisited.extend(children.into_iter().rev());
+                self.next()
+            }
+        }
+    }
+}
+
+impl IntoIterator for PersistentMerkleNode {
+    type Item = (EncodedPublicKey, U256);
+    type IntoIter = self::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter::new(Arc::new(self))
+    }
+}
+
 /// Convert an index to a list of Merkle path branches
 pub fn to_merkle_path(idx: usize, height: usize) -> Vec<usize> {
     let mut pos = idx;
@@ -526,10 +588,18 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{to_merkle_path, PersistentMerkleNode};
-    use crate::stake_table::{config::FieldType, EncodedPublicKey};
-    use ark_std::{sync::Arc, vec, vec::Vec};
+    use crate::stake_table::{
+        config::{self, FieldType},
+        EncodedPublicKey,
+    };
+    use ark_std::{
+        rand::{Rng, RngCore},
+        sync::Arc,
+        vec,
+        vec::Vec,
+    };
     use ethereum_types::U256;
-    use jf_utils::to_bytes;
+    use jf_utils::{test_rng, to_bytes};
 
     #[test]
     fn test_persistent_merkle_tree() {
@@ -644,5 +714,34 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(U256::from(1000), roots.last().unwrap().total_stakes());
+    }
+
+    #[test]
+    fn test_mt_iter() {
+        let height = 3;
+        let capacity = config::TREE_BRANCH.pow(height);
+        let mut rng = test_rng();
+
+        for _ in 0..5 {
+            let num_keys = rng.gen_range(1..capacity);
+            let keys: Vec<EncodedPublicKey> = (0..num_keys)
+                .map(|i| EncodedPublicKey(to_bytes!(&FieldType::from(i as u64)).unwrap()))
+                .collect();
+            let paths = (0..num_keys)
+                .map(|idx| to_merkle_path(idx, height as usize))
+                .collect::<Vec<_>>();
+            let amounts: Vec<U256> = (0..num_keys).map(|_| U256::from(rng.next_u64())).collect();
+
+            // register all `num_keys` of (key, amount) pair.
+            let mut root = Arc::new(PersistentMerkleNode::Empty);
+            for i in 0..num_keys {
+                root = root
+                    .register(height as usize, &paths[i], &keys[i], amounts[i])
+                    .unwrap();
+            }
+            for (i, (k, v)) in (*root).clone().into_iter().enumerate() {
+                assert_eq!((k, v), (keys[i].clone(), amounts[i]));
+            }
+        }
     }
 }

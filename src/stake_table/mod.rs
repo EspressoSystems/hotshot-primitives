@@ -39,6 +39,8 @@ pub trait StakeTableScheme {
     type Commitment;
     /// type for the proof associated with the lookup result (if any)
     type LookupProof;
+    /// type for the iterator over (key, value) entries
+    type IntoIter: Iterator<Item = (Self::Key, Self::Amount)>;
 
     /// Register a new key into the stake table.
     fn register(&mut self, new_key: Self::Key, amount: Self::Amount)
@@ -126,6 +128,9 @@ pub trait StakeTableScheme {
         &self,
         rng: &mut (impl SeedableRng + CryptoRngCore),
     ) -> Option<(&Self::Key, &Self::Amount)>;
+
+    /// Returns an iterator over all (key, value) entries of the `version` of the table
+    fn iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError>;
 }
 
 /// Copied from HotShot repo.
@@ -160,6 +165,7 @@ impl StakeTableScheme for StakeTable {
     type Amount = U256;
     type Commitment = MerkleCommitment;
     type LookupProof = MerkleProof;
+    type IntoIter = utils::IntoIter;
 
     fn register(
         &mut self,
@@ -262,6 +268,11 @@ impl StakeTableScheme for StakeTable {
         let m = U512::from(self.last_epoch_start.total_stakes());
         let pos: U256 = (r % m).try_into().unwrap(); // won't fail
         self.last_epoch_start.get_key_by_stake(pos)
+    }
+
+    fn iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
+        let root = Self::get_root(self, version)?;
+        Ok(utils::IntoIter::new(root))
     }
 }
 
