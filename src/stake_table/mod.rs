@@ -14,10 +14,7 @@ mod utils;
 
 // Exports
 pub mod error;
-pub use utils::MerkleCommitment;
-pub use utils::MerklePath;
-pub use utils::MerklePathEntry;
-pub use utils::MerkleProof;
+pub use utils::{MerkleCommitment, MerklePath, MerklePathEntry, MerkleProof};
 
 /// Snapshots of the stake table
 /// - the latest "Head" where all new changes are applied to
@@ -42,18 +39,18 @@ pub trait StakeTableScheme {
     type Commitment;
     /// type for the proof associated with the lookup result (if any)
     type LookupProof;
-    /// Error type
-    type Error: ark_std::error::Error;
 
     /// Register a new key into the stake table.
-    fn register(&mut self, new_key: Self::Key, amount: Self::Amount) -> Result<(), Self::Error>;
+    fn register(&mut self, new_key: Self::Key, amount: Self::Amount)
+        -> Result<(), StakeTableError>;
 
-    /// Batch register a list of new keys. A default implementation is provided w/o batch optimization.
+    /// Batch register a list of new keys. A default implementation is provided
+    /// w/o batch optimization.
     fn batch_register(
         &mut self,
         new_keys: Vec<Self::Key>,
         amounts: Vec<Self::Amount>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), StakeTableError> {
         let _ = new_keys
             .into_iter()
             .zip(amounts.into_iter())
@@ -63,10 +60,11 @@ pub trait StakeTableScheme {
 
     /// Deregister an existing key from the stake table.
     /// Returns error if some keys are not found.
-    fn deregister(&mut self, existing_key: &Self::Key) -> Result<(), Self::Error>;
+    fn deregister(&mut self, existing_key: &Self::Key) -> Result<(), StakeTableError>;
 
-    /// Batch deregister a list of keys. A default implementation is provided w/o batch optimization.
-    fn batch_deregister(&mut self, existing_keys: &[Self::Key]) -> Result<(), Self::Error> {
+    /// Batch deregister a list of keys. A default implementation is provided
+    /// w/o batch optimization.
+    fn batch_deregister(&mut self, existing_keys: &[Self::Key]) -> Result<(), StakeTableError> {
         let _ = existing_keys
             .iter()
             .try_for_each(|key| Self::deregister(self, key));
@@ -74,23 +72,25 @@ pub trait StakeTableScheme {
     }
 
     /// Returns the commitment to the `version` of stake table.
-    fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, Self::Error>;
+    fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, StakeTableError>;
 
-    /// Returns the accumulated stakes of all registered keys of the `version` of stake table.
-    fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, Self::Error>;
+    /// Returns the accumulated stakes of all registered keys of the `version`
+    /// of stake table.
+    fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, StakeTableError>;
 
     /// Returns the number of keys in the `version` of the table.
-    fn len(&self, version: SnapshotVersion) -> Result<usize, Self::Error>;
+    fn len(&self, version: SnapshotVersion) -> Result<usize, StakeTableError>;
 
     /// Returns true if `key` is currently registered, else returns false.
     fn contains_key(&self, key: &Self::Key) -> bool;
 
-    /// Lookup the stake under a key against a specific historical `version`, returns error if keys unregistered.
+    /// Lookup the stake under a key against a specific historical `version`,
+    /// returns error if keys unregistered.
     fn lookup(
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
-    ) -> Result<(Self::Amount, Self::LookupProof), Self::Error>;
+    ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError>;
 
     /// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
     /// Return the updated stake or error.
@@ -99,16 +99,17 @@ pub trait StakeTableScheme {
         key: &Self::Key,
         delta: Self::Amount,
         negative: bool,
-    ) -> Result<Self::Amount, Self::Error>;
+    ) -> Result<Self::Amount, StakeTableError>;
 
-    /// Batch update the stake balance of `keys`. Read documentation about [`Self::update()`].
-    /// By default, we call `Self::update()` on each (key, amount, negative) tuple.
+    /// Batch update the stake balance of `keys`. Read documentation about
+    /// [`Self::update()`]. By default, we call `Self::update()` on each
+    /// (key, amount, negative) tuple.
     fn batch_update(
         &mut self,
         keys: &[Self::Key],
         amounts: &[Self::Amount],
         negative_flags: Vec<bool>,
-    ) -> Result<Vec<Self::Amount>, Self::Error> {
+    ) -> Result<Vec<Self::Amount>, StakeTableError> {
         let updated_amounts = keys
             .iter()
             .zip(amounts.iter())
@@ -159,9 +160,12 @@ impl StakeTableScheme for StakeTable {
     type Amount = U256;
     type Commitment = MerkleCommitment;
     type LookupProof = MerkleProof;
-    type Error = StakeTableError;
 
-    fn register(&mut self, new_key: Self::Key, amount: Self::Amount) -> Result<(), Self::Error> {
+    fn register(
+        &mut self,
+        new_key: Self::Key,
+        amount: Self::Amount,
+    ) -> Result<(), StakeTableError> {
         match self.mapping.get(&new_key) {
             Some(_) => Err(StakeTableError::ExistingKey),
             None => {
@@ -178,12 +182,12 @@ impl StakeTableScheme for StakeTable {
         }
     }
 
-    fn deregister(&mut self, _existing_key: &Self::Key) -> Result<(), Self::Error> {
+    fn deregister(&mut self, _existing_key: &Self::Key) -> Result<(), StakeTableError> {
         // TODO: (alex) work on this in a future PR
         unimplemented!()
     }
 
-    fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, Self::Error> {
+    fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, StakeTableError> {
         let root = Self::get_root(self, version)?;
         Ok(MerkleCommitment::new(
             root.commitment(),
@@ -192,12 +196,12 @@ impl StakeTableScheme for StakeTable {
         ))
     }
 
-    fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, Self::Error> {
+    fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, StakeTableError> {
         let root = Self::get_root(self, version)?;
         Ok(root.total_stakes())
     }
 
-    fn len(&self, version: SnapshotVersion) -> Result<usize, Self::Error> {
+    fn len(&self, version: SnapshotVersion) -> Result<usize, StakeTableError> {
         let root = Self::get_root(self, version)?;
         Ok(root.num_keys())
     }
@@ -210,7 +214,7 @@ impl StakeTableScheme for StakeTable {
         &self,
         version: SnapshotVersion,
         key: &Self::Key,
-    ) -> Result<(Self::Amount, Self::LookupProof), Self::Error> {
+    ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError> {
         let root = Self::get_root(self, version)?;
 
         let proof = match self.mapping.get(key) {
@@ -229,7 +233,7 @@ impl StakeTableScheme for StakeTable {
         key: &Self::Key,
         delta: Self::Amount,
         negative: bool,
-    ) -> Result<Self::Amount, Self::Error> {
+    ) -> Result<Self::Amount, StakeTableError> {
         match self.mapping.get(key) {
             Some(pos) => {
                 let value: U256;
@@ -246,7 +250,8 @@ impl StakeTableScheme for StakeTable {
         }
     }
 
-    /// Almost uniformly samples a key weighted by its stake from the last_epoch_start stake table
+    /// Almost uniformly samples a key weighted by its stake from the
+    /// last_epoch_start stake table
     fn sample(
         &self,
         rng: &mut (impl SeedableRng + CryptoRngCore),
@@ -338,8 +343,7 @@ mod tests {
         config::FieldType, error::StakeTableError, EncodedPublicKey, SnapshotVersion, StakeTable,
         StakeTableScheme,
     };
-    use ark_std::rand::SeedableRng;
-    use ark_std::vec::Vec;
+    use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
     use jf_utils::to_bytes;
 
