@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/quorum_certificate.rs`."><title>quorum_certificate.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-ba5701c5741a7b69.css" id="mainThemeStyle"><div id="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hotshot_primitives" data-themes="" data-resource-suffix="" data-rustdoc-version="1.70.0 (90c541806 2023-05-31)" data-search-js="search-e077946657036a58.js" data-settings-js="settings-298e1ea74db45b39.js" data-settings-css="settings-7bfb4c59cc6bc502.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ></div><script src="../../static.files/storage-62ce34ea385b278a.js"></script><script defer src="../../static.files/source-script-905937fbbdc8e9ea.js"></script><script defer src="../../source-files.js"></script><script defer src="../../static.files/main-f61008743c98d196.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../hotshot_primitives/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/qc/bit_vector.rs`."><title>bit_vector.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ba5701c5741a7b69.css" id="mainThemeStyle"><div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hotshot_primitives" data-themes="" data-resource-suffix="" data-rustdoc-version="1.70.0 (90c541806 2023-05-31)" data-search-js="search-e077946657036a58.js" data-settings-js="settings-298e1ea74db45b39.js" data-settings-css="settings-7bfb4c59cc6bc502.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ></div><script src="../../../static.files/storage-62ce34ea385b278a.js"></script><script defer src="../../../static.files/source-script-905937fbbdc8e9ea.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-f61008743c98d196.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../hotshot_primitives/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -307,133 +307,32 @@
 <a href="#307" id="307">307</a>
 <a href="#308" id="308">308</a>
 <a href="#309" id="309">309</a>
-<a href="#310" id="310">310</a>
-<a href="#311" id="311">311</a>
-<a href="#312" id="312">312</a>
-<a href="#313" id="313">313</a>
-<a href="#314" id="314">314</a>
-<a href="#315" id="315">315</a>
-<a href="#316" id="316">316</a>
-<a href="#317" id="317">317</a>
-<a href="#318" id="318">318</a>
-<a href="#319" id="319">319</a>
-<a href="#320" id="320">320</a>
-<a href="#321" id="321">321</a>
-<a href="#322" id="322">322</a>
-<a href="#323" id="323">323</a>
-<a href="#324" id="324">324</a>
-<a href="#325" id="325">325</a>
-<a href="#326" id="326">326</a>
-<a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a>
-<a href="#329" id="329">329</a>
-<a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
-<a href="#332" id="332">332</a>
-<a href="#333" id="333">333</a>
-<a href="#334" id="334">334</a>
-<a href="#335" id="335">335</a>
-<a href="#336" id="336">336</a>
-<a href="#337" id="337">337</a>
-<a href="#338" id="338">338</a>
-<a href="#339" id="339">339</a>
-<a href="#340" id="340">340</a>
-<a href="#341" id="341">341</a>
-<a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
-<a href="#344" id="344">344</a>
-<a href="#345" id="345">345</a>
-<a href="#346" id="346">346</a>
-<a href="#347" id="347">347</a>
-<a href="#348" id="348">348</a>
-<a href="#349" id="349">349</a>
-<a href="#350" id="350">350</a>
-<a href="#351" id="351">351</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>ark_std::fmt::Debug;
-<span class="kw">use </span>bitvec::prelude::<span class="kw-2">*</span>;
-<span class="kw">use </span>core::marker::PhantomData;
-<span class="kw">use </span>typenum::U32;
+</pre></div><pre class="rust"><code><span class="doccomment">//! Implementation for BitVectorQC that uses BLS signature + Bit vector.
+//! See more details in HotShot paper.
 
+</span><span class="kw">use </span><span class="kw">crate</span>::qc::QuorumCertificate;
 <span class="kw">use </span>ark_std::{
+    fmt::Debug,
     format,
+    marker::PhantomData,
     rand::{CryptoRng, RngCore},
     vec,
     vec::Vec,
 };
+<span class="kw">use </span>bitvec::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>ethereum_types::U256;
-<span class="kw">use </span>generic_array::{ArrayLength, GenericArray};
+<span class="kw">use </span>generic_array::GenericArray;
 <span class="kw">use </span>jf_primitives::errors::PrimitivesError;
 <span class="kw">use </span>jf_primitives::errors::PrimitivesError::ParameterError;
 <span class="kw">use </span>jf_primitives::signatures::AggregateableSignatureSchemes;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>typenum::U32;
 
-<span class="doccomment">/// Trait for validating a QC built from different signatures on the same message
-</span><span class="kw">pub trait </span>QuorumCertificateValidation&lt;
-    A: AggregateableSignatureSchemes + Serialize + <span class="kw">for</span>&lt;<span class="lifetime">&#39;a</span>&gt; Deserialize&lt;<span class="lifetime">&#39;a</span>&gt;,
-&gt;
-{
-    <span class="doccomment">/// Public parameters for generating the QC
-    /// E.g: snark proving/verifying keys, list of (or pointer to) public keys stored in the smart contract.
-    </span><span class="kw">type </span>QCProverParams: Serialize + <span class="kw">for</span>&lt;<span class="lifetime">&#39;a</span>&gt; Deserialize&lt;<span class="lifetime">&#39;a</span>&gt;;
-
-    <span class="doccomment">/// Public parameters for validating the QC
-    /// E.g: verifying keys, stake table commitment
-    </span><span class="kw">type </span>QCVerifierParams: Serialize + <span class="kw">for</span>&lt;<span class="lifetime">&#39;a</span>&gt; Deserialize&lt;<span class="lifetime">&#39;a</span>&gt;;
-
-    <span class="doccomment">/// Extra value to check the aggregated signature of the QC
-    /// E.g: snark proof, bitmap corresponding to the public keys involved in signing
-    </span><span class="kw">type </span>Proof: Serialize + <span class="kw">for</span>&lt;<span class="lifetime">&#39;a</span>&gt; Deserialize&lt;<span class="lifetime">&#39;a</span>&gt;;
-
-    <span class="doccomment">/// Allows to fix the size of the message at compilation time.
-    </span><span class="kw">type </span>MessageLength: ArrayLength&lt;A::MessageUnit&gt;;
-
-    <span class="doccomment">/// Type of some auxiliary information returned by te check function in order to feed oth
-    </span><span class="kw">type </span>CheckedType;
-
-    <span class="doccomment">/// Produces a partial signature on a message with a single user signing key
-    /// NOTE: the original message (vote) should be prefixed with the hash of the stake table.
-    /// * `agg_sig_pp` - public parameters for aggregate signature
-    /// * `message` - message to be signed
-    /// * `signing_keys` - user signing key
-    /// * `returns` - a &quot;simple&quot; signature
-    </span><span class="kw">fn </span>partial_sign&lt;R: CryptoRng + RngCore&gt;(
-        agg_sig_pp: <span class="kw-2">&amp;</span>A::PublicParameter,
-        message: <span class="kw-2">&amp;</span>GenericArray&lt;A::MessageUnit, <span class="self">Self</span>::MessageLength&gt;,
-        sig_key: <span class="kw-2">&amp;</span>A::SigningKey,
-        prng: <span class="kw-2">&amp;mut </span>R,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;A::Signature, PrimitivesError&gt;;
-
-    <span class="doccomment">/// Computes an aggregated signature from a set of partial signatures and the verification keys involved
-    /// * `qc_pp` - public parameters for generating the QC
-    /// * `active_keys` - a bool vector indicating the list of verification keys corresponding to the set of partial signatures
-    /// * `partial_sigs` - partial signatures on the same message
-    /// * `returns` - an error if some of the partial signatures provided are invalid
-    ///     or the number of partial signatures / verifications keys are different.
-    ///     Otherwise return an aggregated signature with a proof.
-    </span><span class="kw">fn </span>assemble(
-        qc_pp: <span class="kw-2">&amp;</span><span class="self">Self</span>::QCProverParams,
-        active_keys: <span class="kw-2">&amp;</span>BitSlice,
-        partial_sigs: <span class="kw-2">&amp;</span>[A::Signature],
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;(A::Signature, <span class="self">Self</span>::Proof), PrimitivesError&gt;;
-
-    <span class="doccomment">/// Checks an aggregated signature over some message provided as input
-    /// * `qc_vp` - public parameters for validating the QC
-    /// * `message` - message to check the aggregated signature against
-    /// * `sig` - aggregated signature on message
-    /// * `proof` - auxiliary information to check the signature
-    /// * `returns` - nothing if the signature is valid, an error otherwise.
-    </span><span class="kw">fn </span>check(
-        qc_pp: <span class="kw-2">&amp;</span><span class="self">Self</span>::QCVerifierParams,
-        message: <span class="kw-2">&amp;</span>GenericArray&lt;A::MessageUnit, <span class="self">Self</span>::MessageLength&gt;,
-        sig: <span class="kw-2">&amp;</span>A::Signature,
-        proof: <span class="kw-2">&amp;</span><span class="self">Self</span>::Proof,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::CheckedType, PrimitivesError&gt;;
-}
-
-<span class="attr">#[derive(Serialize, Deserialize)]
-</span><span class="kw">pub struct </span>BitvectorQuorumCertificate&lt;
-    A: AggregateableSignatureSchemes + Serialize + <span class="kw">for</span>&lt;<span class="lifetime">&#39;a</span>&gt; Deserialize&lt;<span class="lifetime">&#39;a</span>&gt;,
-&gt;(PhantomData&lt;A&gt;);
+<span class="doccomment">/// An implementation of QC using BLS signature and a bit-vector.
+</span><span class="attr">#[derive(Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>BitVectorQC&lt;A: AggregateableSignatureSchemes + Serialize + <span class="kw">for</span>&lt;<span class="lifetime">&#39;a</span>&gt; Deserialize&lt;<span class="lifetime">&#39;a</span>&gt;&gt;(
+    PhantomData&lt;A&gt;,
+);
 
 <span class="attr">#[derive(Serialize, Deserialize, PartialEq, Debug)]
 </span><span class="kw">pub struct </span>StakeTableEntry&lt;V&gt; {
@@ -448,7 +347,7 @@
     <span class="kw">pub </span>agg_sig_pp: P,
 }
 
-<span class="kw">impl</span>&lt;A&gt; QuorumCertificateValidation&lt;A&gt; <span class="kw">for </span>BitvectorQuorumCertificate&lt;A&gt;
+<span class="kw">impl</span>&lt;A&gt; QuorumCertificate&lt;A&gt; <span class="kw">for </span>BitVectorQC&lt;A&gt;
 <span class="kw">where
     </span>A: AggregateableSignatureSchemes + Serialize + <span class="kw">for</span>&lt;<span class="lifetime">&#39;a</span>&gt; Deserialize&lt;<span class="lifetime">&#39;a</span>&gt;,
 {
@@ -457,41 +356,43 @@
     <span class="comment">// TODO: later with SNARKs we&#39;ll use a smaller verifier parameter
     </span><span class="kw">type </span>QCVerifierParams = QCParams&lt;A::VerificationKey, A::PublicParameter&gt;;
 
-    <span class="kw">type </span>Proof = BitVec;
+    <span class="kw">type </span>QC = (A::Signature, BitVec);
     <span class="kw">type </span>MessageLength = U32;
-    <span class="kw">type </span>CheckedType = ();
+    <span class="kw">type </span>QuorumSize = U256;
 
-    <span class="kw">fn </span>partial_sign&lt;R: CryptoRng + RngCore&gt;(
+    <span class="kw">fn </span>sign&lt;R: CryptoRng + RngCore&gt;(
         agg_sig_pp: <span class="kw-2">&amp;</span>A::PublicParameter,
         message: <span class="kw-2">&amp;</span>GenericArray&lt;A::MessageUnit, <span class="self">Self</span>::MessageLength&gt;,
-        sig_key: <span class="kw-2">&amp;</span>A::SigningKey,
+        sk: <span class="kw-2">&amp;</span>A::SigningKey,
         prng: <span class="kw-2">&amp;mut </span>R,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;A::Signature, PrimitivesError&gt; {
-        A::sign(agg_sig_pp, sig_key, message, prng)
+        A::sign(agg_sig_pp, sk, message, prng)
     }
 
     <span class="kw">fn </span>assemble(
         qc_pp: <span class="kw-2">&amp;</span><span class="self">Self</span>::QCProverParams,
-        active_keys: <span class="kw-2">&amp;</span>BitSlice,
-        partial_sigs: <span class="kw-2">&amp;</span>[A::Signature],
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;(A::Signature, <span class="self">Self</span>::Proof), PrimitivesError&gt; {
-        <span class="kw">if </span>active_keys.len() != qc_pp.stake_entries.len() {
+        signers: <span class="kw-2">&amp;</span>BitSlice,
+        sigs: <span class="kw-2">&amp;</span>[A::Signature],
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::QC, PrimitivesError&gt; {
+        <span class="kw">if </span>signers.len() != qc_pp.stake_entries.len() {
             <span class="kw">return </span><span class="prelude-val">Err</span>(ParameterError(<span class="macro">format!</span>(
                 <span class="string">&quot;bit vector len {} != the number of stake entries {}&quot;</span>,
-                active_keys.len(),
+                signers.len(),
                 qc_pp.stake_entries.len(),
             )));
         }
-        <span class="kw">let </span>total_weight: U256 = qc_pp.stake_entries.iter().zip(active_keys.iter()).fold(
-            U256::zero(),
-            |acc, (entry, b)| {
-                <span class="kw">if </span><span class="kw-2">*</span>b {
-                    acc + entry.stake_amount
-                } <span class="kw">else </span>{
-                    acc
-                }
-            },
-        );
+        <span class="kw">let </span>total_weight: U256 =
+            qc_pp
+                .stake_entries
+                .iter()
+                .zip(signers.iter())
+                .fold(U256::zero(), |acc, (entry, b)| {
+                    <span class="kw">if </span><span class="kw-2">*</span>b {
+                        acc + entry.stake_amount
+                    } <span class="kw">else </span>{
+                        acc
+                    }
+                });
         <span class="kw">if </span>total_weight &lt; qc_pp.threshold {
             <span class="kw">return </span><span class="prelude-val">Err</span>(ParameterError(<span class="macro">format!</span>(
                 <span class="string">&quot;total_weight {} less than threshold {}&quot;</span>,
@@ -499,33 +400,33 @@
             )));
         }
         <span class="kw">let </span><span class="kw-2">mut </span>ver_keys = <span class="macro">vec!</span>[];
-        <span class="kw">for </span>(entry, b) <span class="kw">in </span>qc_pp.stake_entries.iter().zip(active_keys.iter()) {
+        <span class="kw">for </span>(entry, b) <span class="kw">in </span>qc_pp.stake_entries.iter().zip(signers.iter()) {
             <span class="kw">if </span><span class="kw-2">*</span>b {
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        <span class="kw">if </span>ver_keys.len() != partial_sigs.len() {
+        <span class="kw">if </span>ver_keys.len() != sigs.len() {
             <span class="kw">return </span><span class="prelude-val">Err</span>(ParameterError(<span class="macro">format!</span>(
                 <span class="string">&quot;the number of ver_keys {} != the number of partial signatures {}&quot;</span>,
                 ver_keys.len(),
-                partial_sigs.len(),
+                sigs.len(),
             )));
         }
-        <span class="kw">let </span>sig = A::aggregate(<span class="kw-2">&amp;</span>qc_pp.agg_sig_pp, <span class="kw-2">&amp;</span>ver_keys[..], partial_sigs)<span class="question-mark">?</span>;
+        <span class="kw">let </span>sig = A::aggregate(<span class="kw-2">&amp;</span>qc_pp.agg_sig_pp, <span class="kw-2">&amp;</span>ver_keys[..], sigs)<span class="question-mark">?</span>;
 
-        <span class="prelude-val">Ok</span>((sig, active_keys.into()))
+        <span class="prelude-val">Ok</span>((sig, signers.into()))
     }
 
     <span class="kw">fn </span>check(
         qc_vp: <span class="kw-2">&amp;</span><span class="self">Self</span>::QCVerifierParams,
         message: <span class="kw-2">&amp;</span>GenericArray&lt;A::MessageUnit, <span class="self">Self</span>::MessageLength&gt;,
-        sig: <span class="kw-2">&amp;</span>A::Signature,
-        proof: <span class="kw-2">&amp;</span><span class="self">Self</span>::Proof,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::CheckedType, PrimitivesError&gt; {
-        <span class="kw">if </span>proof.len() != qc_vp.stake_entries.len() {
+        qc: <span class="kw-2">&amp;</span><span class="self">Self</span>::QC,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::QuorumSize, PrimitivesError&gt; {
+        <span class="kw">let </span>(sig, signers) = qc;
+        <span class="kw">if </span>signers.len() != qc_vp.stake_entries.len() {
             <span class="kw">return </span><span class="prelude-val">Err</span>(ParameterError(<span class="macro">format!</span>(
-                <span class="string">&quot;proof bit vector len {} != the number of stake entries {}&quot;</span>,
-                proof.len(),
+                <span class="string">&quot;signers bit vector len {} != the number of stake entries {}&quot;</span>,
+                signers.len(),
                 qc_vp.stake_entries.len(),
             )));
         }
@@ -533,7 +434,7 @@
             qc_vp
                 .stake_entries
                 .iter()
-                .zip(proof.iter())
+                .zip(signers.iter())
                 .fold(U256::zero(), |acc, (entry, b)| {
                     <span class="kw">if </span><span class="kw-2">*</span>b {
                         acc + entry.stake_amount
@@ -548,12 +449,40 @@
             )));
         }
         <span class="kw">let </span><span class="kw-2">mut </span>ver_keys = <span class="macro">vec!</span>[];
-        <span class="kw">for </span>(entry, b) <span class="kw">in </span>qc_vp.stake_entries.iter().zip(proof.iter()) {
+        <span class="kw">for </span>(entry, b) <span class="kw">in </span>qc_vp.stake_entries.iter().zip(signers.iter()) {
             <span class="kw">if </span><span class="kw-2">*</span>b {
                 ver_keys.push(entry.stake_key.clone());
             }
         }
-        A::multi_sig_verify(<span class="kw-2">&amp;</span>qc_vp.agg_sig_pp, <span class="kw-2">&amp;</span>ver_keys[..], message, sig)
+        A::multi_sig_verify(<span class="kw-2">&amp;</span>qc_vp.agg_sig_pp, <span class="kw-2">&amp;</span>ver_keys[..], message, sig)<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(total_weight)
+    }
+
+    <span class="kw">fn </span>trace(
+        qc_vp: <span class="kw-2">&amp;</span><span class="self">Self</span>::QCVerifierParams,
+        message: <span class="kw-2">&amp;</span>GenericArray&lt;&lt;A&gt;::MessageUnit, <span class="self">Self</span>::MessageLength&gt;,
+        qc: <span class="kw-2">&amp;</span><span class="self">Self</span>::QC,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;&lt;A&gt;::VerificationKey&gt;, PrimitivesError&gt; {
+        <span class="kw">let </span>(_sig, signers) = qc;
+        <span class="kw">if </span>signers.len() != qc_vp.stake_entries.len() {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(ParameterError(<span class="macro">format!</span>(
+                <span class="string">&quot;signers bit vector len {} != the number of stake entries {}&quot;</span>,
+                signers.len(),
+                qc_vp.stake_entries.len(),
+            )));
+        }
+
+        <span class="self">Self</span>::check(qc_vp, message, qc)<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>signer_pks: Vec&lt;<span class="kw">_</span>&gt; = qc_vp
+            .stake_entries
+            .iter()
+            .zip(signers.iter())
+            .filter(|(<span class="kw">_</span>, b)| <span class="kw-2">**</span>b)
+            .map(|(pk, <span class="kw">_</span>)| pk.stake_key.clone())
+            .collect();
+        <span class="prelude-val">Ok</span>(signer_pks)
     }
 }
 
@@ -588,21 +517,21 @@
                 agg_sig_pp,
             };
             <span class="kw">let </span>msg = [<span class="number">72u8</span>; <span class="number">32</span>];
-            <span class="kw">let </span>sig1 = BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::partial_sign(
+            <span class="kw">let </span>sig1 = BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::sign(
                 <span class="kw-2">&amp;</span>agg_sig_pp,
                 <span class="kw-2">&amp;</span>msg.into(),
                 key_pair1.sign_key_ref(),
                 <span class="kw-2">&amp;mut </span>rng,
             )
             .unwrap();
-            <span class="kw">let </span>sig2 = BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::partial_sign(
+            <span class="kw">let </span>sig2 = BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::sign(
                 <span class="kw-2">&amp;</span>agg_sig_pp,
                 <span class="kw-2">&amp;</span>msg.into(),
                 key_pair2.sign_key_ref(),
                 <span class="kw-2">&amp;mut </span>rng,
             )
             .unwrap();
-            <span class="kw">let </span>sig3 = BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::partial_sign(
+            <span class="kw">let </span>sig3 = BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::sign(
                 <span class="kw-2">&amp;</span>agg_sig_pp,
                 <span class="kw-2">&amp;</span>msg.into(),
                 key_pair3.sign_key_ref(),
@@ -611,20 +540,18 @@
             .unwrap();
 
             <span class="comment">// happy path
-            </span><span class="kw">let </span>active_keys = <span class="macro">bitvec!</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>];
-            <span class="kw">let </span>qc = BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
+            </span><span class="kw">let </span>signers = <span class="macro">bitvec!</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>];
+            <span class="kw">let </span>qc = BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
                 <span class="kw-2">&amp;</span>qc_pp,
-                active_keys.as_bitslice(),
+                signers.as_bitslice(),
                 <span class="kw-2">&amp;</span>[sig2.clone(), sig3.clone()],
             )
             .unwrap();
-            <span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(
-                <span class="kw-2">&amp;</span>qc_pp,
-                <span class="kw-2">&amp;</span>msg.into(),
-                <span class="kw-2">&amp;</span>qc.<span class="number">0</span>,
-                <span class="kw-2">&amp;</span>qc.<span class="number">1
-            </span>)
-            .is_ok());
+            <span class="macro">assert!</span>(BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(<span class="kw-2">&amp;</span>qc_pp, <span class="kw-2">&amp;</span>msg.into(), <span class="kw-2">&amp;</span>qc).is_ok());
+            <span class="macro">assert_eq!</span>(
+                BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::trace(<span class="kw-2">&amp;</span>qc_pp, <span class="kw-2">&amp;</span>msg.into(), <span class="kw-2">&amp;</span>qc).unwrap(),
+                <span class="macro">vec!</span>[key_pair2.ver_key(), key_pair3.ver_key()],
+            );
 
             <span class="comment">// Check the QC and the QCParams can be serialized / deserialized
             </span><span class="macro">assert_eq!</span>(
@@ -639,15 +566,15 @@
 
             <span class="comment">// bad paths
             // number of signatures unmatch
-            </span><span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
+            </span><span class="macro">assert!</span>(BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
                 <span class="kw-2">&amp;</span>qc_pp,
-                active_keys.as_bitslice(),
+                signers.as_bitslice(),
                 <span class="kw-2">&amp;</span>[sig2.clone()]
             )
             .is_err());
             <span class="comment">// total weight under threshold
             </span><span class="kw">let </span>active_bad = <span class="macro">bitvec!</span>[<span class="number">1</span>, <span class="number">1</span>, <span class="number">0</span>];
-            <span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
+            <span class="macro">assert!</span>(BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
                 <span class="kw-2">&amp;</span>qc_pp,
                 active_bad.as_bitslice(),
                 <span class="kw-2">&amp;</span>[sig1.clone(), sig2.clone()]
@@ -655,44 +582,33 @@
             .is_err());
             <span class="comment">// wrong bool vector length
             </span><span class="kw">let </span>active_bad_2 = <span class="macro">bitvec!</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">0</span>];
-            <span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
+            <span class="macro">assert!</span>(BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::assemble(
                 <span class="kw-2">&amp;</span>qc_pp,
                 active_bad_2.as_bitslice(),
                 <span class="kw-2">&amp;</span>[sig2, sig3],
             )
             .is_err());
 
-            <span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(
+            <span class="macro">assert!</span>(BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(
                 <span class="kw-2">&amp;</span>qc_pp,
                 <span class="kw-2">&amp;</span>msg.into(),
-                <span class="kw-2">&amp;</span>qc.<span class="number">0</span>,
-                <span class="kw-2">&amp;</span>active_bad
+                <span class="kw-2">&amp;</span>(qc.<span class="number">0</span>.clone(), active_bad)
             )
             .is_err());
-            <span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(
+            <span class="macro">assert!</span>(BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(
                 <span class="kw-2">&amp;</span>qc_pp,
                 <span class="kw-2">&amp;</span>msg.into(),
-                <span class="kw-2">&amp;</span>qc.<span class="number">0</span>,
-                <span class="kw-2">&amp;</span>active_bad_2
+                <span class="kw-2">&amp;</span>(qc.<span class="number">0</span>.clone(), active_bad_2)
             )
             .is_err());
             <span class="kw">let </span>bad_msg = [<span class="number">70u8</span>; <span class="number">32</span>];
-            <span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(
-                <span class="kw-2">&amp;</span>qc_pp,
-                <span class="kw-2">&amp;</span>bad_msg.into(),
-                <span class="kw-2">&amp;</span>qc.<span class="number">0</span>,
-                <span class="kw-2">&amp;</span>qc.<span class="number">1
-            </span>)
-            .is_err());
+            <span class="macro">assert!</span>(BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(<span class="kw-2">&amp;</span>qc_pp, <span class="kw-2">&amp;</span>bad_msg.into(), <span class="kw-2">&amp;</span>qc).is_err());
 
             <span class="kw">let </span>bad_sig = <span class="kw-2">&amp;</span>sig1;
-            <span class="macro">assert!</span>(BitvectorQuorumCertificate::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(
-                <span class="kw-2">&amp;</span>qc_pp,
-                <span class="kw-2">&amp;</span>msg.into(),
-                <span class="kw-2">&amp;</span>bad_sig,
-                <span class="kw-2">&amp;</span>qc.<span class="number">1
-            </span>)
-            .is_err());
+            <span class="macro">assert!</span>(
+                BitVectorQC::&lt;<span class="macro-nonterminal">$aggsig</span>&gt;::check(<span class="kw-2">&amp;</span>qc_pp, <span class="kw-2">&amp;</span>msg.into(), <span class="kw-2">&amp;</span>(bad_sig.clone(), qc.<span class="number">1</span>))
+                    .is_err()
+            );
         };
     }
     <span class="attr">#[test]

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["circuit","quorum_certificate","stake_table","vdf","vid"]};
+window.SIDEBAR_ITEMS = {"mod":["circuit","qc","stake_table","vdf","vid"]};
