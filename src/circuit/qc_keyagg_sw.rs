@@ -192,8 +192,9 @@ mod tests {
 
         let mut circuit = PlonkCircuit::<F>::new_ultra_plonk(20);
         // public input
-        // TODO: make variables public?
-        let agg_vk_var = VerKeySWVar(circuit.create_emulated_sw_point_variable(agg_vk_point)?);
+        let agg_vk_var =
+            VerKeySWVar(circuit.create_public_emulated_sw_point_variable(agg_vk_point)?);
+        let public_input = agg_vk_point.serialize_to_native_elements();
         let threshold_var = circuit.create_variable(threshold)?;
         let digest_var = circuit.create_variable(digest)?;
 
@@ -214,24 +215,24 @@ mod tests {
         circuit.check_aggregate_vk::<E, P>(&vk_vars[..], &bitvec_vars[..], &agg_vk_var, a_ecc)?;
         circuit.check_stake_table_digest(&vk_vars[..], &stake_amt_vars[..], digest_var)?;
         circuit.check_threshold(&stake_amt_vars[..], &bitvec_vars[..], threshold_var)?;
-        assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
+        assert!(circuit.check_circuit_satisfiability(&public_input).is_ok());
 
         // bad path: wrong aggregated vk
         let tmp_var = agg_vk_var.0 .0.to_vec()[0];
         let tmp = circuit.witness(tmp_var)?;
         *circuit.witness_mut(tmp_var) = F::zero();
-        assert!(circuit.check_circuit_satisfiability(&[]).is_err());
+        assert!(circuit.check_circuit_satisfiability(&public_input).is_err());
         *circuit.witness_mut(tmp_var) = tmp;
 
         // bad path: wrong digest
         let tmp = circuit.witness(digest_var)?;
         *circuit.witness_mut(digest_var) = F::zero();
-        assert!(circuit.check_circuit_satisfiability(&[]).is_err());
+        assert!(circuit.check_circuit_satisfiability(&public_input).is_err());
         *circuit.witness_mut(digest_var) = tmp;
 
         // bad path: bad threshold
         *circuit.witness_mut(threshold_var) = F::from(7u8);
-        assert!(circuit.check_circuit_satisfiability(&[]).is_err());
+        assert!(circuit.check_circuit_satisfiability(&public_input).is_err());
 
         // check input parameter errors
         assert!(circuit
