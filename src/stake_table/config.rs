@@ -9,7 +9,7 @@ use jf_primitives::crhf::FixedLengthRescueCRHF;
 pub(crate) const TREE_BRANCH: usize = 3;
 
 /// Internal type of Merkle node value(commitment)
-pub(crate) type FieldType = ark_bn254::Fr;
+pub(crate) type FieldType = ark_bn254::Fq;
 /// Hash algorithm used in Merkle tree, using a RATE-3 rescue
 pub(crate) type Digest = FixedLengthRescueCRHF<FieldType, TREE_BRANCH, 1>;
 
