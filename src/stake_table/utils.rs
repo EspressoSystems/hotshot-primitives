@@ -13,8 +13,8 @@ use jf_utils::canonical;
 use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
-// since trait bounds alias is not yet stable
-pub(crate) trait Key:
+/// Common trait bounds for generic key type `K` for [`PersistentMerkleNode`]
+pub trait Key:
     Clone + CanonicalSerialize + CanonicalDeserialize + PartialEq + Eq + IntoField<FieldType> + Hash
 {
 }
@@ -126,7 +126,7 @@ impl<K: Key> MerkleProof<K> {
             Some(MerklePathEntry::Leaf { key, value }) => {
                 let input = [
                     FieldType::from(0),
-                    (*key).into_field(),
+                    (*key).clone().into_field(),
                     u256_to_field(value),
                 ];
                 let init = Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0];
@@ -346,7 +346,7 @@ impl<K: Key> PersistentMerkleNode<K> {
             if matches!(self, PersistentMerkleNode::Empty) {
                 let input = [
                     FieldType::from(0u64),
-                    (*key).into_field(),
+                    (*key).clone().into_field(),
                     u256_to_field(&value),
                 ];
                 Ok(Arc::new(PersistentMerkleNode::Leaf {
@@ -443,7 +443,7 @@ impl<K: Key> PersistentMerkleNode<K> {
                     }?;
                     let input = [
                         FieldType::from(0),
-                        (*key).into_field(),
+                        (*key).clone().into_field(),
                         u256_to_field(&value),
                     ];
                     Ok((
@@ -512,7 +512,7 @@ impl<K: Key> PersistentMerkleNode<K> {
                 if key == cur_key {
                     let input = [
                         FieldType::from(0),
-                        (*key).into_field(),
+                        (*key).clone().into_field(),
                         u256_to_field(&value),
                     ];
                     Ok((
@@ -617,7 +617,7 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{to_merkle_path, PersistentMerkleNode};
-    use crate::stake_table::config::{self, FieldType};
+    use crate::stake_table::config;
     use ark_std::{
         rand::{Rng, RngCore},
         sync::Arc,
@@ -636,7 +636,7 @@ mod tests {
         let path = (0..10)
             .map(|idx| to_merkle_path(idx, height))
             .collect::<Vec<_>>();
-        let keys = (0..10).map(|i| FieldType::from(i)).collect::<Vec<_>>();
+        let keys = (0..10).map(Key::from).collect::<Vec<_>>();
         // Insert key (0..10) with associated value 100 to the persistent merkle tree
         for (i, key) in keys.iter().enumerate() {
             roots.push(
@@ -764,7 +764,7 @@ mod tests {
                     .unwrap();
             }
             for (i, (k, v)) in (*root).clone().into_iter().enumerate() {
-                assert_eq!((k, v), (keys[i].clone(), amounts[i]));
+                assert_eq!((k, v), (keys[i], amounts[i]));
             }
         }
     }
