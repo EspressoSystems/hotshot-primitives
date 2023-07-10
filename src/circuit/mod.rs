@@ -1,2 +1,1 @@
-pub mod qc_keyagg_sw;
-pub mod qc_keyagg_te;
+pub mod qc_keyagg;
