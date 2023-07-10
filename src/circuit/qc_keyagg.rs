@@ -19,8 +19,8 @@ use jf_relation::{
 };
 
 /// Digest a list of verification keys and their associated stake amounts
-/// * `stack_amts`: stake amounts
-/// * `keys`: list of verification keys
+/// * `stack_amts` - stake amounts
+/// * `keys` - list of verification keys
 pub fn compute_stake_table_hash<F: RescueParameter, T: SerializableEmulatedStruct<F>>(
     stake_amts: &[F],
     keys: &[T],
@@ -33,11 +33,19 @@ pub fn compute_stake_table_hash<F: RescueParameter, T: SerializableEmulatedStruc
     RescueCRHF::sponge_with_bit_padding(&input_vec[..], 1)[0]
 }
 
+/// Traits for verification keys
 pub trait VerKeyVar<E>: Sized + Clone {
     type KeyType: Default;
 
+    /// Returns a list of variables associated with this key variable.
     fn native_vars(&self) -> Vec<Variable>;
 
+    /// Aggregate the verification keys with Boolean selectors.
+    /// * `circuit` - associated Plonk circuit.
+    /// * `keys` - list of input verification keys.
+    /// * `selectors` - list of Boolean selectors.
+    /// * `coef` - the internal curve parameter.
+    /// * Returns an aggregated key variable.
     fn aggregate_with_selectors<F>(
         circuit: &mut PlonkCircuit<F>,
         keys: &[Self],
@@ -48,6 +56,11 @@ pub trait VerKeyVar<E>: Sized + Clone {
         F: PrimeField,
         E: EmulationConfig<F>;
 
+    /// Check whether two input verification key variables are equal.
+    /// * `circuit` - associated Plonk circuit.
+    /// * `p0` - first verification key variable.
+    /// * `p1` - second verification key variable.
+    /// * Returns a Boolean variable indicates whether `p0 == p1`.
     fn is_equal<F>(
         circuit: &mut PlonkCircuit<F>,
         p0: &Self,
@@ -57,6 +70,10 @@ pub trait VerKeyVar<E>: Sized + Clone {
         F: PrimeField,
         E: EmulationConfig<F>;
 
+    /// Enforce that two input verification key variables are equal.
+    /// * `circuit` - associated Plonk circuit.
+    /// * `p0` - first verification key variable.
+    /// * `p1` - second verification key variable.
     fn enforce_equal<F>(
         circuit: &mut PlonkCircuit<F>,
         p0: &Self,
