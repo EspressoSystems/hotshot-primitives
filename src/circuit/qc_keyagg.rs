@@ -18,13 +18,16 @@ use jf_relation::{
     BoolVar, Circuit, PlonkCircuit, Variable,
 };
 
+/// Digest a list of verification keys and their associated stake amounts
+/// * `stack_amts`: stake amounts
+/// * `keys`: list of verification keys
 pub fn compute_stake_table_hash<F: RescueParameter, T: SerializableEmulatedStruct<F>>(
     stake_amts: &[F],
-    vk_points: &[T],
+    keys: &[T],
 ) -> F {
     let mut input_vec = vec![];
-    for (&amt, point) in stake_amts.iter().zip(vk_points.iter()) {
-        input_vec.extend(point.serialize_to_native_elements());
+    for (&amt, key) in stake_amts.iter().zip(keys.iter()) {
+        input_vec.extend(key.serialize_to_native_elements());
         input_vec.push(amt);
     }
     RescueCRHF::sponge_with_bit_padding(&input_vec[..], 1)[0]
@@ -65,7 +68,6 @@ pub trait VerKeyVar<E>: Sized + Clone {
 }
 
 /// Plonk circuit gadget for stake key aggregation for quorum certificates.
-/// Assuming that the underlying key composes of a short Weierstrass curve point.
 pub trait QCKeyAggregateGadget<F>
 where
     F: RescueParameter,
@@ -74,7 +76,7 @@ where
     /// * `vks` - list of stake public keys.
     /// * `bit_vec` - the indicator vector for the quorum set, `bit_vec[i] = 1` if `i` is in the quorum set, o/w `bit_vec[i] = 0`.
     /// * `agg_vk` - the public aggregated stake key.
-    /// * `coef` - the curve parameter
+    /// * `coef` - the internal curve parameter
     fn check_aggregate_vk<E: EmulationConfig<F>, V: VerKeyVar<E>>(
         &mut self,
         vks: &[V],
