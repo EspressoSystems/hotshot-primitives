@@ -25,7 +25,7 @@ pub struct BitVectorQC<A: AggregateableSignatureSchemes + Serialize + for<'a> De
     PhantomData<A>,
 );
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Hash, Eq)]
 pub struct StakeTableEntry<V> {
     pub stake_key: V,
     pub stake_amount: U256,
