@@ -1,13 +1,11 @@
 use self::{
     error::StakeTableError,
-    utils::{to_merkle_path, PersistentMerkleNode},
+    utils::{to_merkle_path, Key, PersistentMerkleNode},
 };
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{collections::HashMap, rand::SeedableRng, sync::Arc, vec::Vec};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
 use serde::{Deserialize, Serialize};
-use tagged_base64::tagged;
 
 mod config;
 mod utils;
@@ -133,39 +131,31 @@ pub trait StakeTableScheme {
     fn iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError>;
 }
 
-/// Copied from HotShot repo.
-/// Type saftey wrapper for byte encoded keys.
-/// Assume that the content is a canonically serialized public key
-#[tagged("PUBKEY")]
-#[derive(
-    Clone, Debug, Hash, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq, PartialOrd, Ord,
-)]
-pub struct EncodedPublicKey(pub Vec<u8>);
-
 /// Locally maintained stake table
+/// generic over public key type `K` and value/balance type `V`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StakeTable {
+pub struct StakeTable<K: Key> {
     /// The most up-to-date stake table, where the incoming transactions shall be performed on.
-    head: Arc<PersistentMerkleNode>,
+    head: Arc<PersistentMerkleNode<K>>,
     /// The snapshot of stake table at the beginning of the current epoch
-    epoch_start: Arc<PersistentMerkleNode>,
+    epoch_start: Arc<PersistentMerkleNode<K>>,
     /// The stake table used for leader election.
-    last_epoch_start: Arc<PersistentMerkleNode>,
+    last_epoch_start: Arc<PersistentMerkleNode<K>>,
 
     /// Height of the underlying merkle tree, determines the capacity.
     /// The capacity is `TREE_BRANCH.pow(height)`.
     height: usize,
 
     /// The mapping from public keys to their location in the Merkle tree.
-    mapping: HashMap<EncodedPublicKey, usize>,
+    mapping: HashMap<K, usize>,
 }
 
-impl StakeTableScheme for StakeTable {
-    type Key = EncodedPublicKey;
+impl<K: Key> StakeTableScheme for StakeTable<K> {
+    type Key = K;
     type Amount = U256;
     type Commitment = MerkleCommitment;
-    type LookupProof = MerkleProof;
-    type IntoIter = utils::IntoIter;
+    type LookupProof = MerkleProof<K>;
+    type IntoIter = utils::IntoIter<K>;
 
     fn register(
         &mut self,
@@ -276,7 +266,7 @@ impl StakeTableScheme for StakeTable {
     }
 }
 
-impl StakeTable {
+impl<K: Key> StakeTable<K> {
     /// Initiating an empty stake table.
     /// Overall capacity is `TREE_BRANCH.pow(height)`.
     pub fn new(height: usize) -> Self {
@@ -293,7 +283,7 @@ impl StakeTable {
     fn get_root(
         &self,
         version: SnapshotVersion,
-    ) -> Result<Arc<PersistentMerkleNode>, StakeTableError> {
+    ) -> Result<Arc<PersistentMerkleNode<K>>, StakeTableError> {
         match version {
             SnapshotVersion::Head => Ok(Arc::clone(&self.head)),
             SnapshotVersion::EpochStart => Ok(Arc::clone(&self.epoch_start)),
@@ -310,11 +300,7 @@ impl StakeTable {
 
     /// Set the stake withheld by `key` to be `value`.
     /// Return the previous stake if succeed.
-    pub fn set_value(
-        &mut self,
-        key: &EncodedPublicKey,
-        value: U256,
-    ) -> Result<U256, StakeTableError> {
+    pub fn set_value(&mut self, key: &K, value: U256) -> Result<U256, StakeTableError> {
         match self.mapping.get(key) {
             Some(pos) => {
                 let old_value: U256;
@@ -335,7 +321,7 @@ impl StakeTable {
     pub fn simple_lookup(
         &self,
         version: SnapshotVersion,
-        key: &EncodedPublicKey,
+        key: &K,
     ) -> Result<U256, StakeTableError> {
         let root = Self::get_root(self, version)?;
         match self.mapping.get(key) {
@@ -350,26 +336,23 @@ impl StakeTable {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        config::FieldType, error::StakeTableError, EncodedPublicKey, SnapshotVersion, StakeTable,
-        StakeTableScheme,
-    };
+    use super::{error::StakeTableError, SnapshotVersion, StakeTable, StakeTableScheme};
     use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
-    use jf_utils::to_bytes;
+
+    // Hotshot use bn254::Fq as key type.
+    type Key = ark_bn254::Fq;
 
     #[test]
     fn test_stake_table() -> Result<(), StakeTableError> {
         let mut st = StakeTable::new(3);
-        let keys = (0..10)
-            .map(|i| EncodedPublicKey(to_bytes!(&FieldType::from(i)).unwrap()))
-            .collect::<Vec<_>>();
+        let keys = (0..10).map(Key::from).collect::<Vec<_>>();
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(0));
 
         // Registering keys
         keys.iter()
             .take(4)
-            .for_each(|key| st.register(key.clone(), U256::from(100)).unwrap());
+            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(400));
         assert_eq!(st.total_stake(SnapshotVersion::EpochStart)?, U256::from(0));
         assert_eq!(
@@ -385,7 +368,7 @@ mod tests {
         keys.iter()
             .skip(4)
             .take(3)
-            .for_each(|key| st.register(key.clone(), U256::from(100)).unwrap());
+            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(600));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -398,7 +381,7 @@ mod tests {
         st.advance();
         keys.iter()
             .skip(7)
-            .for_each(|key| st.register(key.clone(), U256::from(100)).unwrap());
+            .for_each(|&key| st.register(key, U256::from(100)).unwrap());
         assert_eq!(st.total_stake(SnapshotVersion::Head)?, U256::from(900));
         assert_eq!(
             st.total_stake(SnapshotVersion::EpochStart)?,
@@ -410,7 +393,7 @@ mod tests {
         );
 
         // No duplicate register
-        assert!(st.register(keys[0].clone(), U256::from(100)).is_err());
+        assert!(st.register(keys[0], U256::from(100)).is_err());
         // The 9-th key is still in head stake table
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9]).is_err());
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5]).is_ok());
