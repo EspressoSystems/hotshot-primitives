@@ -48,6 +48,7 @@ where
 /// A persistent merkle tree tailored for the stake table.
 /// Generic over the key type `K`
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(bound = "K: Key")]
 pub(crate) enum PersistentMerkleNode<K: Key> {
     Empty,
     Branch {

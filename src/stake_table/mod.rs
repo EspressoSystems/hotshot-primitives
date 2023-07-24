@@ -132,8 +132,9 @@ pub trait StakeTableScheme {
 }
 
 /// Locally maintained stake table
-/// generic over public key type `K` and value/balance type `V`
+/// generic over public key type `K`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(bound = "K: Key")]
 pub struct StakeTable<K: Key> {
     /// The most up-to-date stake table, where the incoming transactions shall be performed on.
     head: Arc<PersistentMerkleNode<K>>,
@@ -147,6 +148,7 @@ pub struct StakeTable<K: Key> {
     height: usize,
 
     /// The mapping from public keys to their location in the Merkle tree.
+    #[serde(skip)]
     mapping: HashMap<K, usize>,
 }
 
