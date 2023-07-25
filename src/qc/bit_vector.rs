@@ -266,12 +266,30 @@ mod tests {
                 bincode::deserialize(&bincode::serialize(&qc).unwrap()).unwrap()
             );
 
-            // FIXME: (alex) this test reveal a bug/error in our current code:
-            // see: <https://github.com/EspressoSystems/hotshot-primitives/pull/66#issuecomment-1647239871>
-            // assert_eq!(
-            //     qc_pp,
-            //     bincode::deserialize(&bincode::serialize(&qc_pp).unwrap()).unwrap()
-            // );
+            // (alex) since deserialized stake table's leaf would contain normalized projective
+            // points with Z=1, which differs from the original projective representation.
+            // We compare individual fields for equivalence instead.
+            let de_qc_pp: QCParams<$aggsig, ST> =
+                bincode::deserialize(&bincode::serialize(&qc_pp).unwrap()).unwrap();
+            assert_eq!(
+                qc_pp.stake_table.commitment(SnapshotVersion::Head).unwrap(),
+                de_qc_pp
+                    .stake_table
+                    .commitment(SnapshotVersion::Head)
+                    .unwrap(),
+            );
+            assert_eq!(
+                qc_pp
+                    .stake_table
+                    .commitment(SnapshotVersion::LastEpochStart)
+                    .unwrap(),
+                de_qc_pp
+                    .stake_table
+                    .commitment(SnapshotVersion::LastEpochStart)
+                    .unwrap(),
+            );
+            assert_eq!(qc_pp.threshold, de_qc_pp.threshold);
+            assert_eq!(qc_pp.agg_sig_pp, de_qc_pp.agg_sig_pp);
 
             // bad paths
             // number of signatures unmatch

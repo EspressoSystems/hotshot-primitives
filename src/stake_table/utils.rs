@@ -4,18 +4,18 @@ use super::{
     config::{u256_to_field, Digest, FieldType, TREE_BRANCH},
     error::StakeTableError,
 };
-use ark_ff::Field;
+use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{hash::Hash, sync::Arc, vec, vec::Vec};
 use ethereum_types::U256;
-use jf_primitives::crhf::CRHF;
+use jf_primitives::{crhf::CRHF, signatures::bls_over_bn254};
 use jf_utils::canonical;
 use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
 /// Common trait bounds for generic key type `K` for [`PersistentMerkleNode`]
 pub trait Key:
-    Clone + CanonicalSerialize + CanonicalDeserialize + PartialEq + Eq + IntoField<FieldType> + Hash
+    Clone + CanonicalSerialize + CanonicalDeserialize + PartialEq + Eq + IntoFields<FieldType> + Hash
 {
 }
 impl<T> Key for T where
@@ -24,24 +24,29 @@ impl<T> Key for T where
         + CanonicalDeserialize
         + PartialEq
         + Eq
-        + IntoField<FieldType>
+        + IntoFields<FieldType>
         + Hash
 {
 }
 
 /// A trait that converts into a field element.
 /// Help avoid "cannot impl foreign traits on foreign types" problem
-pub trait IntoField<F: Field> {
-    fn into_field(self) -> F;
+pub trait IntoFields<F: Field> {
+    fn into_fields(self) -> [F; 2];
 }
 
-// blanket implementation for those `T` that already implements `Into<F>`
-impl<T, F> IntoField<F> for T
-where
-    F: From<T> + Field,
-{
-    fn into_field(self) -> F {
-        Into::into(self)
+impl IntoFields<FieldType> for FieldType {
+    fn into_fields(self) -> [FieldType; 2] {
+        [FieldType::default(), self]
+    }
+}
+
+impl IntoFields<FieldType> for bls_over_bn254::VerKey {
+    fn into_fields(self) -> [FieldType; 2] {
+        let bytes = jf_utils::to_bytes!(&self.to_affine()).unwrap();
+        let x = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[..32]);
+        let y = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[32..]);
+        [x, y]
     }
 }
 
@@ -125,11 +130,9 @@ impl<K: Key> MerkleProof<K> {
     pub fn compute_root(&self) -> Result<FieldType, StakeTableError> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => {
-                let input = [
-                    FieldType::from(0),
-                    (*key).clone().into_field(),
-                    u256_to_field(value),
-                ];
+                let mut input = [FieldType::default(); 3];
+                input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                input[2] = u256_to_field(value);
                 let init = Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0];
                 self.path
                     .iter()
@@ -345,11 +348,9 @@ impl<K: Key> PersistentMerkleNode<K> {
     ) -> Result<Arc<Self>, StakeTableError> {
         if height == 0 {
             if matches!(self, PersistentMerkleNode::Empty) {
-                let input = [
-                    FieldType::from(0u64),
-                    (*key).clone().into_field(),
-                    u256_to_field(&value),
-                ];
+                let mut input = [FieldType::default(); 3];
+                input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                input[2] = u256_to_field(&value);
                 Ok(Arc::new(PersistentMerkleNode::Leaf {
                     comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
                     key: key.clone(),
@@ -442,11 +443,9 @@ impl<K: Key> PersistentMerkleNode<K> {
                             .checked_add(delta)
                             .ok_or(StakeTableError::StakeOverflow)
                     }?;
-                    let input = [
-                        FieldType::from(0),
-                        (*key).clone().into_field(),
-                        u256_to_field(&value),
-                    ];
+                    let mut input = [FieldType::default(); 3];
+                    input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                    input[2] = u256_to_field(&value);
                     Ok((
                         Arc::new(PersistentMerkleNode::Leaf {
                             comm: Digest::evaluate(input)
@@ -511,11 +510,9 @@ impl<K: Key> PersistentMerkleNode<K> {
                 value: old_value,
             } => {
                 if key == cur_key {
-                    let input = [
-                        FieldType::from(0),
-                        (*key).clone().into_field(),
-                        u256_to_field(&value),
-                    ];
+                    let mut input = [FieldType::default(); 3];
+                    input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                    input[2] = u256_to_field(&value);
                     Ok((
                         Arc::new(PersistentMerkleNode::Leaf {
                             comm: Digest::evaluate(input)
