@@ -46,11 +46,11 @@ pub trait StakeTableScheme {
 
     /// Batch register a list of new keys. A default implementation is provided
     /// w/o batch optimization.
-    fn batch_register(
-        &mut self,
-        new_keys: Vec<Self::Key>,
-        amounts: Vec<Self::Amount>,
-    ) -> Result<(), StakeTableError> {
+    fn batch_register<I, J>(&mut self, new_keys: I, amounts: J) -> Result<(), StakeTableError>
+    where
+        I: IntoIterator<Item = Self::Key>,
+        J: IntoIterator<Item = Self::Amount>,
+    {
         let _ = new_keys
             .into_iter()
             .zip(amounts.into_iter())
@@ -64,9 +64,13 @@ pub trait StakeTableScheme {
 
     /// Batch deregister a list of keys. A default implementation is provided
     /// w/o batch optimization.
-    fn batch_deregister(&mut self, existing_keys: &[Self::Key]) -> Result<(), StakeTableError> {
+    fn batch_deregister<'a, I>(&mut self, existing_keys: I) -> Result<(), StakeTableError>
+    where
+        I: IntoIterator<Item = &'a <Self as StakeTableScheme>::Key>,
+        <Self as StakeTableScheme>::Key: 'a,
+    {
         let _ = existing_keys
-            .iter()
+            .into_iter()
             .try_for_each(|key| Self::deregister(self, key));
         Ok(())
     }
