@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/stake_table/mod.rs`."><title>mod.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ba5701c5741a7b69.css" id="mainThemeStyle"><div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hotshot_primitives" data-themes="" data-resource-suffix="" data-rustdoc-version="1.70.0 (90c541806 2023-05-31)" data-search-js="search-e077946657036a58.js" data-settings-js="settings-298e1ea74db45b39.js" data-settings-css="settings-7bfb4c59cc6bc502.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ></div><script src="../../../static.files/storage-62ce34ea385b278a.js"></script><script defer src="../../../static.files/source-script-905937fbbdc8e9ea.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-f61008743c98d196.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../hotshot_primitives/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/stake_table/mod.rs`."><title>mod.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-f3501f0f5ae15dfb.css" id="mainThemeStyle"><div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hotshot_primitives" data-themes="" data-resource-suffix="" data-rustdoc-version="1.71.0 (8ede3aae2 2023-07-12)" data-search-js="search-4926e5fc22a5646a.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ></div><script src="../../../static.files/storage-62ce34ea385b278a.js"></script><script defer src="../../../static.files/source-script-11255107d0a65077.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-f0540c1d82cde29b.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../hotshot_primitives/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -314,98 +314,400 @@
 <a href="#314" id="314">314</a>
 <a href="#315" id="315">315</a>
 <a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
+<a href="#366" id="366">366</a>
+<a href="#367" id="367">367</a>
+<a href="#368" id="368">368</a>
+<a href="#369" id="369">369</a>
+<a href="#370" id="370">370</a>
+<a href="#371" id="371">371</a>
+<a href="#372" id="372">372</a>
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
+<a href="#410" id="410">410</a>
+<a href="#411" id="411">411</a>
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
+<a href="#456" id="456">456</a>
+<a href="#457" id="457">457</a>
+<a href="#458" id="458">458</a>
+<a href="#459" id="459">459</a>
+<a href="#460" id="460">460</a>
+<a href="#461" id="461">461</a>
+<a href="#462" id="462">462</a>
+<a href="#463" id="463">463</a>
+<a href="#464" id="464">464</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::{
     error::StakeTableError,
-    utils::{to_merkle_path, PersistentMerkleNode},
+    utils::{to_merkle_path, Key, PersistentMerkleNode},
 };
-<span class="kw">use </span>ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-<span class="kw">use </span>ark_std::{
-    collections::HashMap,
-    rand::{CryptoRng, RngCore},
-    sync::Arc,
-    vec::Vec,
-};
+<span class="kw">use </span>ark_std::{collections::HashMap, rand::SeedableRng, sync::Arc, vec::Vec};
+<span class="kw">use </span>digest::crypto_common::rand_core::CryptoRngCore;
 <span class="kw">use </span>ethereum_types::{U256, U512};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
-<span class="kw">use </span>tagged_base64::tagged;
 
 <span class="kw">mod </span>config;
 <span class="kw">mod </span>utils;
 
 <span class="comment">// Exports
 </span><span class="kw">pub mod </span>error;
-<span class="kw">pub use </span>utils::MerkleCommitment;
-<span class="kw">pub use </span>utils::MerklePath;
-<span class="kw">pub use </span>utils::MerklePathEntry;
-<span class="kw">pub use </span>utils::MerkleProof;
+<span class="kw">pub use </span>utils::{MerkleCommitment, MerklePath, MerklePathEntry, MerkleProof};
 
-<span class="doccomment">/// Copied from HotShot repo.
-/// Type saftey wrapper for byte encoded keys.
-/// Assume that the content is a canonically serialized public key
-</span><span class="attr">#[tagged(<span class="string">&quot;PUBKEY&quot;</span>)]
-#[derive(
-    Clone, Debug, Hash, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq, PartialOrd, Ord,
-)]
-</span><span class="kw">pub struct </span>EncodedPublicKey(<span class="kw">pub </span>Vec&lt;u8&gt;);
+<span class="doccomment">/// Snapshots of the stake table
+/// - the latest &quot;Head&quot; where all new changes are applied to
+/// - `EpochStart` marks the snapshot at the beginning of the current epoch
+/// - `LastEpochStart` marks the beginning of the last epoch
+/// - `BlockNum(u64)` at arbitrary block height
+</span><span class="kw">pub enum </span>SnapshotVersion {
+    Head,
+    EpochStart,
+    LastEpochStart,
+    BlockNum(u64),
+}
 
-<span class="doccomment">/// Enum type for stake table version
-///  * `STVersion::PENDING`: the most up-to-date stake table, where the incoming transactions shall be performed on.
-///  * `STVersion::FROZEN`: when an epoch ends, the PENDING stake table is frozen for leader elections for next epoch.
-///  * `STVersion::ACTIVE`: the active stake table for leader election.
-</span><span class="kw">pub enum </span>STVersion {
-    PENDING,
-    FROZEN,
-    ACTIVE,
+<span class="doccomment">/// Common interfaces required for a stake table used in HotShot System.
+/// APIs that doesn&#39;t take `version: SnapshotVersion` as an input by default works on the head/latest version.
+</span><span class="kw">pub trait </span>StakeTableScheme {
+    <span class="doccomment">/// type for stake key
+    </span><span class="kw">type </span>Key: Clone;
+    <span class="doccomment">/// type for the staked amount
+    </span><span class="kw">type </span>Amount: Clone + Copy;
+    <span class="doccomment">/// type for the commitment to the current stake table
+    </span><span class="kw">type </span>Commitment;
+    <span class="doccomment">/// type for the proof associated with the lookup result (if any)
+    </span><span class="kw">type </span>LookupProof;
+    <span class="doccomment">/// type for the iterator over (key, value) entries
+    </span><span class="kw">type </span>IntoIter: Iterator&lt;Item = (<span class="self">Self</span>::Key, <span class="self">Self</span>::Amount)&gt;;
+
+    <span class="doccomment">/// Register a new key into the stake table.
+    </span><span class="kw">fn </span>register(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_key: <span class="self">Self</span>::Key, amount: <span class="self">Self</span>::Amount)
+        -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt;;
+
+    <span class="doccomment">/// Batch register a list of new keys. A default implementation is provided
+    /// w/o batch optimization.
+    </span><span class="kw">fn </span>batch_register&lt;I, J&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_keys: I, amounts: J) -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt;
+    <span class="kw">where
+        </span>I: IntoIterator&lt;Item = <span class="self">Self</span>::Key&gt;,
+        J: IntoIterator&lt;Item = <span class="self">Self</span>::Amount&gt;,
+    {
+        <span class="kw">let _ </span>= new_keys
+            .into_iter()
+            .zip(amounts.into_iter())
+            .try_for_each(|(key, amount)| <span class="self">Self</span>::register(<span class="self">self</span>, key, amount));
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Deregister an existing key from the stake table.
+    /// Returns error if some keys are not found.
+    </span><span class="kw">fn </span>deregister(<span class="kw-2">&amp;mut </span><span class="self">self</span>, existing_key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key) -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt;;
+
+    <span class="doccomment">/// Batch deregister a list of keys. A default implementation is provided
+    /// w/o batch optimization.
+    </span><span class="kw">fn </span>batch_deregister&lt;<span class="lifetime">&#39;a</span>, I&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, existing_keys: I) -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt;
+    <span class="kw">where
+        </span>I: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>&lt;<span class="self">Self </span><span class="kw">as </span>StakeTableScheme&gt;::Key&gt;,
+        &lt;<span class="self">Self </span><span class="kw">as </span>StakeTableScheme&gt;::Key: <span class="lifetime">&#39;a</span>,
+    {
+        <span class="kw">let _ </span>= existing_keys
+            .into_iter()
+            .try_for_each(|key| <span class="self">Self</span>::deregister(<span class="self">self</span>, key));
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Returns the commitment to the `version` of stake table.
+    </span><span class="kw">fn </span>commitment(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Commitment, StakeTableError&gt;;
+
+    <span class="doccomment">/// Returns the accumulated stakes of all registered keys of the `version`
+    /// of stake table.
+    </span><span class="kw">fn </span>total_stake(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Amount, StakeTableError&gt;;
+
+    <span class="doccomment">/// Returns the number of keys in the `version` of the table.
+    </span><span class="kw">fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;usize, StakeTableError&gt;;
+
+    <span class="doccomment">/// Returns true if `key` is currently registered, else returns false.
+    </span><span class="kw">fn </span>contains_key(<span class="kw-2">&amp;</span><span class="self">self</span>, key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key) -&gt; bool;
+
+    <span class="doccomment">/// Lookup the stake under a key against a specific historical `version`,
+    /// returns error if keys unregistered.
+    </span><span class="kw">fn </span>lookup(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        version: SnapshotVersion,
+        key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>::Amount, <span class="self">Self</span>::LookupProof), StakeTableError&gt;;
+
+    <span class="doccomment">/// Returns the stakes withhelded by a public key, None if the key is not registered.
+    /// If you need a lookup proof, use [`Self::lookup()`] instead (which is usually more expensive).
+    </span><span class="kw">fn </span>simple_lookup(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        version: SnapshotVersion,
+        key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Amount, StakeTableError&gt;;
+
+    <span class="doccomment">/// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
+    /// Return the updated stake or error.
+    </span><span class="kw">fn </span>update(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key,
+        delta: <span class="self">Self</span>::Amount,
+        negative: bool,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Amount, StakeTableError&gt;;
+
+    <span class="doccomment">/// Batch update the stake balance of `keys`. Read documentation about
+    /// [`Self::update()`]. By default, we call `Self::update()` on each
+    /// (key, amount, negative) tuple.
+    </span><span class="kw">fn </span>batch_update(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        keys: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Key],
+        amounts: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Amount],
+        negative_flags: Vec&lt;bool&gt;,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="self">Self</span>::Amount&gt;, StakeTableError&gt; {
+        <span class="kw">let </span>updated_amounts = keys
+            .iter()
+            .zip(amounts.iter())
+            .zip(negative_flags.iter())
+            .map(|((key, <span class="kw-2">&amp;</span>amount), negative)| <span class="self">Self</span>::update(<span class="self">self</span>, key, amount, <span class="kw-2">*</span>negative))
+            .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(updated_amounts)
+    }
+
+    <span class="doccomment">/// Randomly sample a (key, stake_amount) pair proportional to the stake distributions,
+    /// given a fixed seed for `rng`, this sampling should be deterministic.
+    </span><span class="kw">fn </span>sample(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        rng: <span class="kw-2">&amp;mut </span>(<span class="kw">impl </span>SeedableRng + CryptoRngCore),
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;(<span class="kw-2">&amp;</span><span class="self">Self</span>::Key, <span class="kw-2">&amp;</span><span class="self">Self</span>::Amount)&gt;;
+
+    <span class="doccomment">/// Returns an iterator over all (key, value) entries of the `version` of the table
+    </span><span class="kw">fn </span>iter(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::IntoIter, StakeTableError&gt;;
 }
 
 <span class="doccomment">/// Locally maintained stake table
+/// generic over public key type `K`.
 </span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-</span><span class="kw">pub struct </span>StakeTable {
+#[serde(bound = <span class="string">&quot;K: Key&quot;</span>)]
+</span><span class="kw">pub struct </span>StakeTable&lt;K: Key&gt; {
     <span class="doccomment">/// The most up-to-date stake table, where the incoming transactions shall be performed on.
-    </span>pending: Arc&lt;PersistentMerkleNode&gt;,
-    <span class="doccomment">/// When an epoch ends, the PENDING stake table is frozen for leader elections for next epoch.
-    </span>frozen: Arc&lt;PersistentMerkleNode&gt;,
-    <span class="doccomment">/// The active stake table for leader election.
-    </span>active: Arc&lt;PersistentMerkleNode&gt;,
+    </span>head: Arc&lt;PersistentMerkleNode&lt;K&gt;&gt;,
+    <span class="doccomment">/// The snapshot of stake table at the beginning of the current epoch
+    </span>epoch_start: Arc&lt;PersistentMerkleNode&lt;K&gt;&gt;,
+    <span class="doccomment">/// The stake table used for leader election.
+    </span>last_epoch_start: Arc&lt;PersistentMerkleNode&lt;K&gt;&gt;,
 
     <span class="doccomment">/// Height of the underlying merkle tree, determines the capacity.
     /// The capacity is `TREE_BRANCH.pow(height)`.
     </span>height: usize,
 
     <span class="doccomment">/// The mapping from public keys to their location in the Merkle tree.
-    </span>mapping: HashMap&lt;EncodedPublicKey, usize&gt;,
+    </span><span class="attr">#[serde(skip)]
+    </span>mapping: HashMap&lt;K, usize&gt;,
 }
 
-<span class="kw">impl </span>StakeTable {
-    <span class="doccomment">/// Initiating an empty stake table.
-    /// Overall capacity is `TREE_BRANCH.pow(height)`.
-    </span><span class="kw">pub fn </span>new(height: usize) -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            pending: Arc::new(PersistentMerkleNode::Empty),
-            frozen: Arc::new(PersistentMerkleNode::Empty),
-            active: Arc::new(PersistentMerkleNode::Empty),
-            height,
-            mapping: HashMap::new(),
+<span class="kw">impl</span>&lt;K: Key&gt; StakeTableScheme <span class="kw">for </span>StakeTable&lt;K&gt; {
+    <span class="kw">type </span>Key = K;
+    <span class="kw">type </span>Amount = U256;
+    <span class="kw">type </span>Commitment = MerkleCommitment;
+    <span class="kw">type </span>LookupProof = MerkleProof&lt;K&gt;;
+    <span class="kw">type </span>IntoIter = utils::IntoIter&lt;K&gt;;
+
+    <span class="kw">fn </span>register(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        new_key: <span class="self">Self</span>::Key,
+        amount: <span class="self">Self</span>::Amount,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt; {
+        <span class="kw">match </span><span class="self">self</span>.mapping.get(<span class="kw-2">&amp;</span>new_key) {
+            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(StakeTableError::ExistingKey),
+            <span class="prelude-val">None </span>=&gt; {
+                <span class="kw">let </span>pos = <span class="self">self</span>.mapping.len();
+                <span class="self">self</span>.head = <span class="self">self</span>.head.register(
+                    <span class="self">self</span>.height,
+                    <span class="kw-2">&amp;</span>to_merkle_path(pos, <span class="self">self</span>.height),
+                    <span class="kw-2">&amp;</span>new_key,
+                    amount,
+                )<span class="question-mark">?</span>;
+                <span class="self">self</span>.mapping.insert(new_key, pos);
+                <span class="prelude-val">Ok</span>(())
+            }
         }
     }
 
-    <span class="doccomment">/// Update the stake table when the epoch number advances, should be manually called.
-    </span><span class="kw">pub fn </span>advance(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="self">self</span>.active = <span class="self">self</span>.frozen.clone();
-        <span class="self">self</span>.frozen = <span class="self">self</span>.pending.clone();
+    <span class="kw">fn </span>deregister(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _existing_key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key) -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt; {
+        <span class="comment">// TODO: (alex) work on this in a future PR
+        </span><span class="macro">unimplemented!</span>()
     }
 
-    <span class="doccomment">/// Returns the number of stakes holding by the input key for a specific stake table version
-    </span><span class="kw">pub fn </span>simple_lookup(
+    <span class="kw">fn </span>commitment(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Commitment, StakeTableError&gt; {
+        <span class="kw">let </span>root = <span class="self">Self</span>::get_root(<span class="self">self</span>, version)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(MerkleCommitment::new(
+            root.commitment(),
+            <span class="self">self</span>.height,
+            root.num_keys(),
+        ))
+    }
+
+    <span class="kw">fn </span>total_stake(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Amount, StakeTableError&gt; {
+        <span class="kw">let </span>root = <span class="self">Self</span>::get_root(<span class="self">self</span>, version)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(root.total_stakes())
+    }
+
+    <span class="kw">fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;usize, StakeTableError&gt; {
+        <span class="kw">let </span>root = <span class="self">Self</span>::get_root(<span class="self">self</span>, version)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(root.num_keys())
+    }
+
+    <span class="kw">fn </span>contains_key(<span class="kw-2">&amp;</span><span class="self">self</span>, key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key) -&gt; bool {
+        <span class="self">self</span>.mapping.contains_key(key)
+    }
+
+    <span class="kw">fn </span>lookup(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        version: STVersion,
-        key: <span class="kw-2">&amp;</span>EncodedPublicKey,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;U256, StakeTableError&gt; {
-        <span class="kw">let </span>root = <span class="kw">match </span>version {
-            STVersion::PENDING =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.pending,
-            STVersion::FROZEN =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.frozen,
-            STVersion::ACTIVE =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.active,
-        };
+        version: SnapshotVersion,
+        key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>::Amount, <span class="self">Self</span>::LookupProof), StakeTableError&gt; {
+        <span class="kw">let </span>root = <span class="self">Self</span>::get_root(<span class="self">self</span>, version)<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>proof = <span class="kw">match </span><span class="self">self</span>.mapping.get(key) {
+            <span class="prelude-val">Some</span>(index) =&gt; {
+                <span class="kw">let </span>branches = to_merkle_path(<span class="kw-2">*</span>index, <span class="self">self</span>.height);
+                root.lookup(<span class="self">self</span>.height, <span class="kw-2">&amp;</span>branches)
+            }
+            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(StakeTableError::KeyNotFound),
+        }<span class="question-mark">?</span>;
+        <span class="kw">let </span>amount = <span class="kw-2">*</span>proof.get_value().ok_or(StakeTableError::KeyNotFound)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>((amount, proof))
+    }
+
+    <span class="kw">fn </span>simple_lookup(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        version: SnapshotVersion,
+        key: <span class="kw-2">&amp;</span>K,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Amount, StakeTableError&gt; {
+        <span class="kw">let </span>root = <span class="self">Self</span>::get_root(<span class="self">self</span>, version)<span class="question-mark">?</span>;
         <span class="kw">match </span><span class="self">self</span>.mapping.get(key) {
             <span class="prelude-val">Some</span>(index) =&gt; {
                 <span class="kw">let </span>branches = to_merkle_path(<span class="kw-2">*</span>index, <span class="self">self</span>.height);
@@ -415,100 +717,16 @@
         }
     }
 
-    <span class="doccomment">/// Returns a membership proof for the input key for a specific stake table version
-    </span><span class="kw">pub fn </span>lookup(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        version: STVersion,
-        key: <span class="kw-2">&amp;</span>EncodedPublicKey,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;MerkleProof, StakeTableError&gt; {
-        <span class="kw">let </span>root = <span class="kw">match </span>version {
-            STVersion::PENDING =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.pending,
-            STVersion::FROZEN =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.frozen,
-            STVersion::ACTIVE =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.active,
-        };
-        <span class="kw">match </span><span class="self">self</span>.mapping.get(key) {
-            <span class="prelude-val">Some</span>(index) =&gt; {
-                <span class="kw">let </span>branches = to_merkle_path(<span class="kw-2">*</span>index, <span class="self">self</span>.height);
-                root.lookup(<span class="self">self</span>.height, <span class="kw-2">&amp;</span>branches)
-            }
-            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(StakeTableError::KeyNotFound),
-        }
-    }
-
-    <span class="doccomment">/// Returns a succint commitment for a specific stake table version
-    </span><span class="kw">pub fn </span>commitment(<span class="kw-2">&amp;</span><span class="self">self</span>, version: STVersion) -&gt; MerkleCommitment {
-        <span class="kw">let </span>root = <span class="kw">match </span>version {
-            STVersion::PENDING =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.pending,
-            STVersion::FROZEN =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.frozen,
-            STVersion::ACTIVE =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.active,
-        };
-        MerkleCommitment::new(root.commitment(), <span class="self">self</span>.height, root.num_keys())
-    }
-
-    <span class="doccomment">/// Returns the total amount of stakes for a specific stake table version
-    </span><span class="kw">pub fn </span>total_stakes(<span class="kw-2">&amp;</span><span class="self">self</span>, version: STVersion) -&gt; U256 {
-        <span class="kw">let </span>root = <span class="kw">match </span>version {
-            STVersion::PENDING =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.pending,
-            STVersion::FROZEN =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.frozen,
-            STVersion::ACTIVE =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.active,
-        };
-        root.total_stakes()
-    }
-
-    <span class="doccomment">/// Returns the number of keys for a specific stake table version
-    </span><span class="kw">pub fn </span>num_keys(<span class="kw-2">&amp;</span><span class="self">self</span>, version: STVersion) -&gt; usize {
-        <span class="kw">let </span>root = <span class="kw">match </span>version {
-            STVersion::PENDING =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.pending,
-            STVersion::FROZEN =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.frozen,
-            STVersion::ACTIVE =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.active,
-        };
-        root.num_keys()
-    }
-
-    <span class="doccomment">/// Almost uniformly samples a key weighted by its stake from the active stake table
-    </span><span class="kw">pub fn </span>sample_key_by_stake&lt;R: CryptoRng + RngCore&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, rng: <span class="kw-2">&amp;mut </span>R) -&gt; <span class="kw-2">&amp;</span>EncodedPublicKey {
-        <span class="kw">let </span><span class="kw-2">mut </span>bytes = [<span class="number">0u8</span>; <span class="number">64</span>];
-        rng.fill_bytes(<span class="kw-2">&amp;mut </span>bytes);
-        <span class="kw">let </span>r = U512::from_big_endian(<span class="kw-2">&amp;</span>bytes);
-        <span class="kw">let </span>m = U512::from(<span class="self">self</span>.active.total_stakes());
-        <span class="kw">let </span>pos: U256 = (r % m).try_into().unwrap();
-        <span class="self">self</span>.active.get_key_by_stake(pos).unwrap()
-    }
-
-    <span class="doccomment">/// Set the stake withheld by `key` to be `value`.
-    /// Return the previous stake if succeed.
-    </span><span class="kw">pub fn </span>set_value(
+    <span class="kw">fn </span>update(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        key: <span class="kw-2">&amp;</span>EncodedPublicKey,
-        value: U256,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;U256, StakeTableError&gt; {
-        <span class="kw">match </span><span class="self">self</span>.mapping.get(key) {
-            <span class="prelude-val">Some</span>(pos) =&gt; {
-                <span class="kw">let </span>old_value: U256;
-                (<span class="self">self</span>.pending, old_value) = <span class="self">self</span>.pending.set_value(
-                    <span class="self">self</span>.height,
-                    <span class="kw-2">&amp;</span>to_merkle_path(<span class="kw-2">*</span>pos, <span class="self">self</span>.height),
-                    key,
-                    value,
-                )<span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(old_value)
-            }
-            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(StakeTableError::KeyNotFound),
-        }
-    }
-
-    <span class="doccomment">/// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
-    /// Return the updated stake
-    </span><span class="kw">pub fn </span>update(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        key: <span class="kw-2">&amp;</span>EncodedPublicKey,
-        delta: U256,
+        key: <span class="kw-2">&amp;</span><span class="self">Self</span>::Key,
+        delta: <span class="self">Self</span>::Amount,
         negative: bool,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;U256, StakeTableError&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Amount, StakeTableError&gt; {
         <span class="kw">match </span><span class="self">self</span>.mapping.get(key) {
             <span class="prelude-val">Some</span>(pos) =&gt; {
                 <span class="kw">let </span>value: U256;
-                (<span class="self">self</span>.pending, value) = <span class="self">self</span>.pending.update(
+                (<span class="self">self</span>.head, value) = <span class="self">self</span>.head.update(
                     <span class="self">self</span>.height,
                     <span class="kw-2">&amp;</span>to_merkle_path(<span class="kw-2">*</span>pos, <span class="self">self</span>.height),
                     key,
@@ -521,49 +739,102 @@
         }
     }
 
-    <span class="doccomment">/// Register a new key from the pending stake table
-    </span><span class="kw">pub fn </span>register(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>EncodedPublicKey, value: U256) -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt; {
+    <span class="doccomment">/// Almost uniformly samples a key weighted by its stake from the
+    /// last_epoch_start stake table
+    </span><span class="kw">fn </span>sample(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        rng: <span class="kw-2">&amp;mut </span>(<span class="kw">impl </span>SeedableRng + CryptoRngCore),
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;(<span class="kw-2">&amp;</span><span class="self">Self</span>::Key, <span class="kw-2">&amp;</span><span class="self">Self</span>::Amount)&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>bytes = [<span class="number">0u8</span>; <span class="number">64</span>];
+        rng.fill_bytes(<span class="kw-2">&amp;mut </span>bytes);
+        <span class="kw">let </span>r = U512::from_big_endian(<span class="kw-2">&amp;</span>bytes);
+        <span class="kw">let </span>m = U512::from(<span class="self">self</span>.last_epoch_start.total_stakes());
+        <span class="kw">let </span>pos: U256 = (r % m).try_into().unwrap(); <span class="comment">// won&#39;t fail
+        </span><span class="self">self</span>.last_epoch_start.get_key_by_stake(pos)
+    }
+
+    <span class="kw">fn </span>iter(<span class="kw-2">&amp;</span><span class="self">self</span>, version: SnapshotVersion) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::IntoIter, StakeTableError&gt; {
+        <span class="kw">let </span>root = <span class="self">Self</span>::get_root(<span class="self">self</span>, version)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(utils::IntoIter::new(root))
+    }
+}
+
+<span class="kw">impl</span>&lt;K: Key&gt; StakeTable&lt;K&gt; {
+    <span class="doccomment">/// Initiating an empty stake table.
+    /// Overall capacity is `TREE_BRANCH.pow(height)`.
+    </span><span class="kw">pub fn </span>new(height: usize) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            head: Arc::new(PersistentMerkleNode::Empty),
+            epoch_start: Arc::new(PersistentMerkleNode::Empty),
+            last_epoch_start: Arc::new(PersistentMerkleNode::Empty),
+            height,
+            mapping: HashMap::new(),
+        }
+    }
+
+    <span class="comment">// returns the root of stake table at `version`
+    </span><span class="kw">fn </span>get_root(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        version: SnapshotVersion,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;PersistentMerkleNode&lt;K&gt;&gt;, StakeTableError&gt; {
+        <span class="kw">match </span>version {
+            SnapshotVersion::Head =&gt; <span class="prelude-val">Ok</span>(Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.head)),
+            SnapshotVersion::EpochStart =&gt; <span class="prelude-val">Ok</span>(Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.epoch_start)),
+            SnapshotVersion::LastEpochStart =&gt; <span class="prelude-val">Ok</span>(Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.last_epoch_start)),
+            SnapshotVersion::BlockNum(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(StakeTableError::SnapshotUnsupported),
+        }
+    }
+
+    <span class="doccomment">/// Update the stake table when the epoch number advances, should be manually called.
+    </span><span class="kw">pub fn </span>advance(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="self">self</span>.last_epoch_start = <span class="self">self</span>.epoch_start.clone();
+        <span class="self">self</span>.epoch_start = <span class="self">self</span>.head.clone();
+    }
+
+    <span class="doccomment">/// Set the stake withheld by `key` to be `value`.
+    /// Return the previous stake if succeed.
+    </span><span class="kw">pub fn </span>set_value(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>K, value: U256) -&gt; <span class="prelude-ty">Result</span>&lt;U256, StakeTableError&gt; {
         <span class="kw">match </span><span class="self">self</span>.mapping.get(key) {
-            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(StakeTableError::ExistingKey),
-            <span class="prelude-val">None </span>=&gt; {
-                <span class="kw">let </span>pos = <span class="self">self</span>.mapping.len();
-                <span class="self">self</span>.mapping.insert(key.clone(), pos);
-                <span class="self">self</span>.pending = <span class="self">self</span>.pending.register(
+            <span class="prelude-val">Some</span>(pos) =&gt; {
+                <span class="kw">let </span>old_value: U256;
+                (<span class="self">self</span>.head, old_value) = <span class="self">self</span>.head.set_value(
                     <span class="self">self</span>.height,
-                    <span class="kw-2">&amp;</span>to_merkle_path(pos, <span class="self">self</span>.height),
+                    <span class="kw-2">&amp;</span>to_merkle_path(<span class="kw-2">*</span>pos, <span class="self">self</span>.height),
                     key,
                     value,
                 )<span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
+                <span class="prelude-val">Ok</span>(old_value)
             }
+            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(StakeTableError::KeyNotFound),
         }
     }
 }
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
-    <span class="kw">use </span><span class="kw">crate</span>::stake_table::STVersion;
-
-    <span class="kw">use super</span>::{config::FieldType, EncodedPublicKey, StakeTable};
-    <span class="kw">use </span>ark_std::vec::Vec;
+    <span class="kw">use super</span>::{error::StakeTableError, SnapshotVersion, StakeTable, StakeTableScheme};
+    <span class="kw">use </span>ark_std::{rand::SeedableRng, vec::Vec};
     <span class="kw">use </span>ethereum_types::U256;
-    <span class="kw">use </span>jf_utils::to_bytes;
+
+    <span class="comment">// Hotshot use bn254::Fq as key type.
+    </span><span class="kw">type </span>Key = ark_bn254::Fq;
 
     <span class="attr">#[test]
-    </span><span class="kw">fn </span>test_stake_table() {
+    </span><span class="kw">fn </span>test_stake_table() -&gt; <span class="prelude-ty">Result</span>&lt;(), StakeTableError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>st = StakeTable::new(<span class="number">3</span>);
-        <span class="kw">let </span>keys = (<span class="number">0</span>..<span class="number">10</span>)
-            .map(|i| EncodedPublicKey(<span class="macro">to_bytes!</span>(<span class="kw-2">&amp;</span>FieldType::from(i)).unwrap()))
-            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::PENDING), U256::from(<span class="number">0</span>));
+        <span class="kw">let </span>keys = (<span class="number">0</span>..<span class="number">10</span>).map(Key::from).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+        <span class="macro">assert_eq!</span>(st.total_stake(SnapshotVersion::Head)<span class="question-mark">?</span>, U256::from(<span class="number">0</span>));
 
         <span class="comment">// Registering keys
         </span>keys.iter()
             .take(<span class="number">4</span>)
-            .for_each(|key| st.register(key, U256::from(<span class="number">100</span>)).unwrap());
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::PENDING), U256::from(<span class="number">400</span>));
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::FROZEN), U256::from(<span class="number">0</span>));
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::ACTIVE), U256::from(<span class="number">0</span>));
+            .for_each(|<span class="kw-2">&amp;</span>key| st.register(key, U256::from(<span class="number">100</span>)).unwrap());
+        <span class="macro">assert_eq!</span>(st.total_stake(SnapshotVersion::Head)<span class="question-mark">?</span>, U256::from(<span class="number">400</span>));
+        <span class="macro">assert_eq!</span>(st.total_stake(SnapshotVersion::EpochStart)<span class="question-mark">?</span>, U256::from(<span class="number">0</span>));
+        <span class="macro">assert_eq!</span>(
+            st.total_stake(SnapshotVersion::LastEpochStart)<span class="question-mark">?</span>,
+            U256::from(<span class="number">0</span>)
+        );
         <span class="comment">// set to zero for futher sampling test
         </span><span class="macro">assert_eq!</span>(
             st.set_value(<span class="kw-2">&amp;</span>keys[<span class="number">1</span>], U256::from(<span class="number">0</span>)).unwrap(),
@@ -573,34 +844,51 @@
         keys.iter()
             .skip(<span class="number">4</span>)
             .take(<span class="number">3</span>)
-            .for_each(|key| st.register(key, U256::from(<span class="number">100</span>)).unwrap());
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::PENDING), U256::from(<span class="number">600</span>));
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::FROZEN), U256::from(<span class="number">300</span>));
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::ACTIVE), U256::from(<span class="number">0</span>));
+            .for_each(|<span class="kw-2">&amp;</span>key| st.register(key, U256::from(<span class="number">100</span>)).unwrap());
+        <span class="macro">assert_eq!</span>(st.total_stake(SnapshotVersion::Head)<span class="question-mark">?</span>, U256::from(<span class="number">600</span>));
+        <span class="macro">assert_eq!</span>(
+            st.total_stake(SnapshotVersion::EpochStart)<span class="question-mark">?</span>,
+            U256::from(<span class="number">300</span>)
+        );
+        <span class="macro">assert_eq!</span>(
+            st.total_stake(SnapshotVersion::LastEpochStart)<span class="question-mark">?</span>,
+            U256::from(<span class="number">0</span>)
+        );
         st.advance();
         keys.iter()
             .skip(<span class="number">7</span>)
-            .for_each(|key| st.register(key, U256::from(<span class="number">100</span>)).unwrap());
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::PENDING), U256::from(<span class="number">900</span>));
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::FROZEN), U256::from(<span class="number">600</span>));
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::ACTIVE), U256::from(<span class="number">300</span>));
+            .for_each(|<span class="kw-2">&amp;</span>key| st.register(key, U256::from(<span class="number">100</span>)).unwrap());
+        <span class="macro">assert_eq!</span>(st.total_stake(SnapshotVersion::Head)<span class="question-mark">?</span>, U256::from(<span class="number">900</span>));
+        <span class="macro">assert_eq!</span>(
+            st.total_stake(SnapshotVersion::EpochStart)<span class="question-mark">?</span>,
+            U256::from(<span class="number">600</span>)
+        );
+        <span class="macro">assert_eq!</span>(
+            st.total_stake(SnapshotVersion::LastEpochStart)<span class="question-mark">?</span>,
+            U256::from(<span class="number">300</span>)
+        );
 
         <span class="comment">// No duplicate register
-        </span><span class="macro">assert!</span>(st.register(<span class="kw-2">&amp;</span>keys[<span class="number">0</span>], U256::from(<span class="number">100</span>)).is_err());
-        <span class="comment">// The 9-th key is still in pending stake table
-        </span><span class="macro">assert!</span>(st.simple_lookup(STVersion::FROZEN, <span class="kw-2">&amp;</span>keys[<span class="number">9</span>]).is_err());
-        <span class="macro">assert!</span>(st.simple_lookup(STVersion::FROZEN, <span class="kw-2">&amp;</span>keys[<span class="number">5</span>]).is_ok());
+        </span><span class="macro">assert!</span>(st.register(keys[<span class="number">0</span>], U256::from(<span class="number">100</span>)).is_err());
+        <span class="comment">// The 9-th key is still in head stake table
+        </span><span class="macro">assert!</span>(st.lookup(SnapshotVersion::EpochStart, <span class="kw-2">&amp;</span>keys[<span class="number">9</span>]).is_err());
+        <span class="macro">assert!</span>(st.lookup(SnapshotVersion::EpochStart, <span class="kw-2">&amp;</span>keys[<span class="number">5</span>]).is_ok());
         <span class="comment">// The 6-th key is still frozen
-        </span><span class="macro">assert!</span>(st.simple_lookup(STVersion::ACTIVE, <span class="kw-2">&amp;</span>keys[<span class="number">6</span>]).is_err());
-        <span class="macro">assert!</span>(st.simple_lookup(STVersion::ACTIVE, <span class="kw-2">&amp;</span>keys[<span class="number">2</span>]).is_ok());
+        </span><span class="macro">assert!</span>(st
+            .lookup(SnapshotVersion::LastEpochStart, <span class="kw-2">&amp;</span>keys[<span class="number">6</span>])
+            .is_err());
+        <span class="macro">assert!</span>(st.lookup(SnapshotVersion::LastEpochStart, <span class="kw-2">&amp;</span>keys[<span class="number">2</span>]).is_ok());
 
         <span class="comment">// Set value shall return the old value
         </span><span class="macro">assert_eq!</span>(
             st.set_value(<span class="kw-2">&amp;</span>keys[<span class="number">0</span>], U256::from(<span class="number">101</span>)).unwrap(),
             U256::from(<span class="number">100</span>)
         );
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::PENDING), U256::from(<span class="number">901</span>));
-        <span class="macro">assert_eq!</span>(st.total_stakes(STVersion::FROZEN), U256::from(<span class="number">600</span>));
+        <span class="macro">assert_eq!</span>(st.total_stake(SnapshotVersion::Head)<span class="question-mark">?</span>, U256::from(<span class="number">901</span>));
+        <span class="macro">assert_eq!</span>(
+            st.total_stake(SnapshotVersion::EpochStart)<span class="question-mark">?</span>,
+            U256::from(<span class="number">600</span>)
+        );
 
         <span class="comment">// Update that results in a negative stake
         </span><span class="macro">assert!</span>(st.update(<span class="kw-2">&amp;</span>keys[<span class="number">0</span>], U256::from(<span class="number">1000</span>), <span class="bool-val">true</span>).is_err());
@@ -615,19 +903,27 @@
         );
 
         <span class="comment">// Testing membership proof
-        </span><span class="kw">let </span>proof = st.lookup(STVersion::FROZEN, <span class="kw-2">&amp;</span>keys[<span class="number">5</span>]).unwrap();
-        <span class="macro">assert!</span>(proof.verify(<span class="kw-2">&amp;</span>st.commitment(STVersion::FROZEN)).is_ok());
+        </span><span class="kw">let </span>proof = st.lookup(SnapshotVersion::EpochStart, <span class="kw-2">&amp;</span>keys[<span class="number">5</span>])<span class="question-mark">?</span>.<span class="number">1</span>;
+        <span class="macro">assert!</span>(proof
+            .verify(<span class="kw-2">&amp;</span>st.commitment(SnapshotVersion::EpochStart)<span class="question-mark">?</span>)
+            .is_ok());
         <span class="comment">// Membership proofs are tied with a specific version
-        </span><span class="macro">assert!</span>(proof.verify(<span class="kw-2">&amp;</span>st.commitment(STVersion::PENDING)).is_err());
-        <span class="macro">assert!</span>(proof.verify(<span class="kw-2">&amp;</span>st.commitment(STVersion::ACTIVE)).is_err());
+        </span><span class="macro">assert!</span>(proof
+            .verify(<span class="kw-2">&amp;</span>st.commitment(SnapshotVersion::Head)<span class="question-mark">?</span>)
+            .is_err());
+        <span class="macro">assert!</span>(proof
+            .verify(<span class="kw-2">&amp;</span>st.commitment(SnapshotVersion::LastEpochStart)<span class="question-mark">?</span>)
+            .is_err());
 
         <span class="comment">// Random test for sampling keys
-        </span><span class="kw">let </span><span class="kw-2">mut </span>rng = jf_utils::test_rng();
+        </span><span class="kw">let </span><span class="kw-2">mut </span>rng = rand_chacha::ChaCha20Rng::seed_from_u64(<span class="number">41u64</span>);
         <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">100 </span>{
-            <span class="kw">let </span>key = st.sample_key_by_stake(<span class="kw-2">&amp;mut </span>rng);
+            <span class="kw">let </span>(_key, value) = st.sample(<span class="kw-2">&amp;mut </span>rng).unwrap();
             <span class="comment">// Sampled keys should have positive stake
-            </span><span class="macro">assert!</span>(st.simple_lookup(STVersion::ACTIVE, key).unwrap() &gt; U256::from(<span class="number">0</span>));
+            </span><span class="macro">assert!</span>(value &gt; <span class="kw-2">&amp;</span>U256::from(<span class="number">0</span>));
         }
+
+        <span class="prelude-val">Ok</span>(())
     }
 }
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["MerklePathEntry","STVersion"],"mod":["error"],"struct":["EncodedPublicKey","MerkleCommitment","MerkleProof","StakeTable"],"type":["MerklePath"]};
+window.SIDEBAR_ITEMS = {"enum":["MerklePathEntry","SnapshotVersion"],"mod":["error"],"struct":["MerkleCommitment","MerkleProof","StakeTable"],"trait":["StakeTableScheme"],"type":["MerklePath"]};
