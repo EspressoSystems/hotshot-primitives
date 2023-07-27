@@ -31,7 +31,7 @@ jf-relation = { git = "https://github.com/espressosystems/jellyfish" }
 jf-utils = { git = "https://github.com/espressosystems/jellyfish" }
 serde = { version = "1.0", default-features = false, features = ["derive", "rc"] }
 sha3 = "0.10.7"
-tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.0" }
+tagged-base64 = { git = "https://github.com/espressosystems/tagged-base64", tag = "0.3.1" }
 thiserror = "1.0"
 typenum = { version = "1.16.0" }
 
