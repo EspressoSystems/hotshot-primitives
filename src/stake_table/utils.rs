@@ -3,24 +3,63 @@
 use super::{
     config::{u256_to_field, Digest, FieldType, TREE_BRANCH},
     error::StakeTableError,
-    EncodedPublicKey,
 };
+use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::{sync::Arc, vec, vec::Vec};
+use ark_std::{hash::Hash, sync::Arc, vec, vec::Vec};
 use ethereum_types::U256;
-use jf_primitives::crhf::CRHF;
+use jf_primitives::{crhf::CRHF, signatures::bls_over_bn254};
 use jf_utils::canonical;
 use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
+/// Common trait bounds for generic key type `K` for [`PersistentMerkleNode`]
+pub trait Key:
+    Clone + CanonicalSerialize + CanonicalDeserialize + PartialEq + Eq + IntoFields<FieldType> + Hash
+{
+}
+impl<T> Key for T where
+    T: Clone
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + PartialEq
+        + Eq
+        + IntoFields<FieldType>
+        + Hash
+{
+}
+
+/// A trait that converts into a field element.
+/// Help avoid "cannot impl foreign traits on foreign types" problem
+pub trait IntoFields<F: Field> {
+    fn into_fields(self) -> [F; 2];
+}
+
+impl IntoFields<FieldType> for FieldType {
+    fn into_fields(self) -> [FieldType; 2] {
+        [FieldType::default(), self]
+    }
+}
+
+impl IntoFields<FieldType> for bls_over_bn254::VerKey {
+    fn into_fields(self) -> [FieldType; 2] {
+        let bytes = jf_utils::to_bytes!(&self.to_affine()).unwrap();
+        let x = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[..32]);
+        let y = <ark_bn254::Fq as PrimeField>::from_le_bytes_mod_order(&bytes[32..]);
+        [x, y]
+    }
+}
+
 /// A persistent merkle tree tailored for the stake table.
+/// Generic over the key type `K`
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) enum PersistentMerkleNode {
+#[serde(bound = "K: Key")]
+pub(crate) enum PersistentMerkleNode<K: Key> {
     Empty,
     Branch {
         #[serde(with = "canonical")]
         comm: FieldType,
-        children: [Arc<PersistentMerkleNode>; TREE_BRANCH],
+        children: [Arc<PersistentMerkleNode<K>>; TREE_BRANCH],
         num_keys: usize,
         total_stakes: U256,
     },
@@ -28,37 +67,37 @@ pub(crate) enum PersistentMerkleNode {
         #[serde(with = "canonical")]
         comm: FieldType,
         #[serde(with = "canonical")]
-        key: EncodedPublicKey,
+        key: K,
         value: U256,
     },
 }
 
 /// A compressed Merkle node for Merkle path
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum MerklePathEntry {
+pub enum MerklePathEntry<K> {
     Branch {
         pos: usize,
         #[serde(with = "canonical")]
         siblings: [FieldType; TREE_BRANCH - 1],
     },
     Leaf {
-        key: EncodedPublicKey,
+        key: K,
         value: U256,
     },
 }
 /// Path from a Merkle root to a leaf
-pub type MerklePath = Vec<MerklePathEntry>;
+pub type MerklePath<K> = Vec<MerklePathEntry<K>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// An existential proof
-pub struct MerkleProof {
+pub struct MerkleProof<K> {
     /// Index for the given key
     pub index: usize,
     /// A Merkle path for the given leaf
-    pub path: MerklePath,
+    pub path: MerklePath<K>,
 }
 
-impl MerkleProof {
+impl<K: Key> MerkleProof<K> {
     pub fn tree_height(&self) -> usize {
         self.path.len() - 1
     }
@@ -67,7 +106,7 @@ impl MerkleProof {
         &self.index
     }
 
-    pub fn get_key(&self) -> Option<&EncodedPublicKey> {
+    pub fn get_key(&self) -> Option<&K> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value: _ }) => Some(key),
             _ => None,
@@ -81,7 +120,7 @@ impl MerkleProof {
         }
     }
 
-    pub fn get_key_value(&self) -> Option<(&EncodedPublicKey, &U256)> {
+    pub fn get_key_value(&self) -> Option<(&K, &U256)> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => Some((key, value)),
             _ => None,
@@ -91,12 +130,9 @@ impl MerkleProof {
     pub fn compute_root(&self) -> Result<FieldType, StakeTableError> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => {
-                let input = [
-                    FieldType::from(0),
-                    <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
-                        .unwrap(),
-                    u256_to_field(value),
-                ];
+                let mut input = [FieldType::default(); 3];
+                input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                input[2] = u256_to_field(value);
                 let init = Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0];
                 self.path
                     .iter()
@@ -160,7 +196,7 @@ impl MerkleCommitment {
     }
 }
 
-impl PersistentMerkleNode {
+impl<K: Key> PersistentMerkleNode<K> {
     /// Returns the succint commitment of this subtree
     pub fn commitment(&self) -> FieldType {
         match self {
@@ -234,7 +270,7 @@ impl PersistentMerkleNode {
     }
 
     /// Returns a Merkle proof to the given location
-    pub fn lookup(&self, height: usize, path: &[usize]) -> Result<MerkleProof, StakeTableError> {
+    pub fn lookup(&self, height: usize, path: &[usize]) -> Result<MerkleProof<K>, StakeTableError> {
         match self {
             PersistentMerkleNode::Empty => Err(StakeTableError::KeyNotFound),
             PersistentMerkleNode::Branch {
@@ -274,7 +310,7 @@ impl PersistentMerkleNode {
     /// Imagine that the keys in this subtree is sorted, returns the first key such that
     /// the prefix sum of withholding stakes is greater or equal the given `stake_number`.
     /// Useful for key sampling weighted by withholding stakes
-    pub fn get_key_by_stake(&self, mut stake_number: U256) -> Option<&EncodedPublicKey> {
+    pub fn get_key_by_stake(&self, mut stake_number: U256) -> Option<(&K, &U256)> {
         if stake_number >= self.total_stakes() {
             None
         } else {
@@ -296,8 +332,8 @@ impl PersistentMerkleNode {
                 PersistentMerkleNode::Leaf {
                     comm: _,
                     key,
-                    value: _,
-                } => Some(key),
+                    value,
+                } => Some((key, value)),
             }
         }
     }
@@ -307,17 +343,14 @@ impl PersistentMerkleNode {
         &self,
         height: usize,
         path: &[usize],
-        key: &EncodedPublicKey,
+        key: &K,
         value: U256,
     ) -> Result<Arc<Self>, StakeTableError> {
         if height == 0 {
             if matches!(self, PersistentMerkleNode::Empty) {
-                let input = [
-                    FieldType::from(0u64),
-                    <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
-                        .unwrap(),
-                    u256_to_field(&value),
-                ];
+                let mut input = [FieldType::default(); 3];
+                input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                input[2] = u256_to_field(&value);
                 Ok(Arc::new(PersistentMerkleNode::Leaf {
                     comm: Digest::evaluate(input).map_err(|_| StakeTableError::RescueError)?[0],
                     key: key.clone(),
@@ -362,7 +395,7 @@ impl PersistentMerkleNode {
         &self,
         height: usize,
         path: &[usize],
-        key: &EncodedPublicKey,
+        key: &K,
         delta: U256,
         negative: bool,
     ) -> Result<(Arc<Self>, U256), StakeTableError> {
@@ -410,12 +443,9 @@ impl PersistentMerkleNode {
                             .checked_add(delta)
                             .ok_or(StakeTableError::StakeOverflow)
                     }?;
-                    let input = [
-                        FieldType::from(0),
-                        <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
-                            .unwrap(),
-                        u256_to_field(&value),
-                    ];
+                    let mut input = [FieldType::default(); 3];
+                    input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                    input[2] = u256_to_field(&value);
                     Ok((
                         Arc::new(PersistentMerkleNode::Leaf {
                             comm: Digest::evaluate(input)
@@ -438,7 +468,7 @@ impl PersistentMerkleNode {
         &self,
         height: usize,
         path: &[usize],
-        key: &EncodedPublicKey,
+        key: &K,
         value: U256,
     ) -> Result<(Arc<Self>, U256), StakeTableError> {
         match self {
@@ -480,12 +510,9 @@ impl PersistentMerkleNode {
                 value: old_value,
             } => {
                 if key == cur_key {
-                    let input = [
-                        FieldType::from(0),
-                        <FieldType as CanonicalDeserialize>::deserialize_compressed(&key.0[..])
-                            .unwrap(),
-                        u256_to_field(&value),
-                    ];
+                    let mut input = [FieldType::default(); 3];
+                    input[..2].copy_from_slice(&(*key).clone().into_fields()[..]);
+                    input[2] = u256_to_field(&value);
                     Ok((
                         Arc::new(PersistentMerkleNode::Leaf {
                             comm: Digest::evaluate(input)
@@ -500,6 +527,68 @@ impl PersistentMerkleNode {
                 }
             }
         }
+    }
+}
+
+/// An owning iterator over the (key, value) entries of a `PersistentMerkleNode`
+/// Traverse using post-order: children from left to right, finally visit the current.
+pub struct IntoIter<K: Key> {
+    unvisited: Vec<Arc<PersistentMerkleNode<K>>>,
+    num_visited: usize,
+}
+
+impl<K: Key> IntoIter<K> {
+    /// create a new merkle tree iterator from a `root`.
+    /// This (abstract) `root` can be an internal node of a larger tree, our iterator
+    /// will iterate over all of its children.
+    pub(crate) fn new(root: Arc<PersistentMerkleNode<K>>) -> Self {
+        Self {
+            unvisited: vec![root],
+            num_visited: 0,
+        }
+    }
+}
+
+impl<K: Key> Iterator for IntoIter<K> {
+    type Item = (K, U256);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.unvisited.is_empty() {
+            return None;
+        }
+
+        let visiting = (**self.unvisited.last()?).clone();
+        match visiting {
+            PersistentMerkleNode::Empty => None,
+            PersistentMerkleNode::Leaf {
+                comm: _,
+                key,
+                value,
+            } => {
+                self.unvisited.pop();
+                self.num_visited += 1;
+                Some((key, value))
+            }
+            PersistentMerkleNode::Branch {
+                comm: _,
+                children,
+                num_keys: _,
+                total_stakes: _,
+            } => {
+                self.unvisited.pop();
+                // put the left-most child to the last, so it is visited first.
+                self.unvisited.extend(children.into_iter().rev());
+                self.next()
+            }
+        }
+    }
+}
+
+impl<K: Key> IntoIterator for PersistentMerkleNode<K> {
+    type Item = (K, U256);
+    type IntoIter = self::IntoIter<K>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter::new(Arc::new(self))
     }
 }
 
@@ -526,21 +615,26 @@ pub fn from_merkle_path(path: &[usize]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{to_merkle_path, PersistentMerkleNode};
-    use crate::stake_table::{config::FieldType, EncodedPublicKey};
-    use ark_std::{sync::Arc, vec, vec::Vec};
+    use crate::stake_table::config;
+    use ark_std::{
+        rand::{Rng, RngCore},
+        sync::Arc,
+        vec,
+        vec::Vec,
+    };
     use ethereum_types::U256;
-    use jf_utils::to_bytes;
+    use jf_utils::test_rng;
+
+    type Key = ark_bn254::Fq;
 
     #[test]
     fn test_persistent_merkle_tree() {
         let height = 3;
-        let mut roots = vec![Arc::new(PersistentMerkleNode::Empty)];
+        let mut roots = vec![Arc::new(PersistentMerkleNode::<Key>::Empty)];
         let path = (0..10)
             .map(|idx| to_merkle_path(idx, height))
             .collect::<Vec<_>>();
-        let keys = (0..10)
-            .map(|i| EncodedPublicKey(to_bytes!(&FieldType::from(i)).unwrap()))
-            .collect::<Vec<_>>();
+        let keys = (0..10).map(Key::from).collect::<Vec<_>>();
         // Insert key (0..10) with associated value 100 to the persistent merkle tree
         for (i, key) in keys.iter().enumerate() {
             roots.push(
@@ -573,6 +667,7 @@ mod tests {
                     .unwrap()
                     .get_key_by_stake(U256::from(i as u64 * 100 + i as u64 + 1))
                     .unwrap()
+                    .0
             );
         });
 
@@ -643,5 +738,32 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(U256::from(1000), roots.last().unwrap().total_stakes());
+    }
+
+    #[test]
+    fn test_mt_iter() {
+        let height = 3;
+        let capacity = config::TREE_BRANCH.pow(height);
+        let mut rng = test_rng();
+
+        for _ in 0..5 {
+            let num_keys = rng.gen_range(1..capacity);
+            let keys: Vec<Key> = (0..num_keys).map(|i| Key::from(i as u64)).collect();
+            let paths = (0..num_keys)
+                .map(|idx| to_merkle_path(idx, height as usize))
+                .collect::<Vec<_>>();
+            let amounts: Vec<U256> = (0..num_keys).map(|_| U256::from(rng.next_u64())).collect();
+
+            // register all `num_keys` of (key, amount) pair.
+            let mut root = Arc::new(PersistentMerkleNode::<Key>::Empty);
+            for i in 0..num_keys {
+                root = root
+                    .register(height as usize, &paths[i], &keys[i], amounts[i])
+                    .unwrap();
+            }
+            for (i, (k, v)) in (*root).clone().into_iter().enumerate() {
+                assert_eq!((k, v), (keys[i], amounts[i]));
+            }
+        }
     }
 }
