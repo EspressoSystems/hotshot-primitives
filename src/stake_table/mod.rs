@@ -96,6 +96,14 @@ pub trait StakeTableScheme {
         key: &Self::Key,
     ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError>;
 
+    /// Returns the stakes withhelded by a public key, None if the key is not registered.
+    /// If you need a lookup proof, use [`Self::lookup()`] instead (which is usually more expensive).
+    fn simple_lookup(
+        &self,
+        version: SnapshotVersion,
+        key: &Self::Key,
+    ) -> Result<Self::Amount, StakeTableError>;
+
     /// Update the stake of the `key` with `(negative ? -1 : 1) * delta`.
     /// Return the updated stake or error.
     fn update(
@@ -230,6 +238,21 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         Ok((amount, proof))
     }
 
+    fn simple_lookup(
+        &self,
+        version: SnapshotVersion,
+        key: &K,
+    ) -> Result<Self::Amount, StakeTableError> {
+        let root = Self::get_root(self, version)?;
+        match self.mapping.get(key) {
+            Some(index) => {
+                let branches = to_merkle_path(*index, self.height);
+                root.simple_lookup(self.height, &branches)
+            }
+            None => Err(StakeTableError::KeyNotFound),
+        }
+    }
+
     fn update(
         &mut self,
         key: &Self::Key,
@@ -317,23 +340,6 @@ impl<K: Key> StakeTable<K> {
                     value,
                 )?;
                 Ok(old_value)
-            }
-            None => Err(StakeTableError::KeyNotFound),
-        }
-    }
-
-    /// Returns the stakes withhelded by a public key, None if the key is not registered.
-    /// If you need a lookup proof, use [`Self::lookup()`] instead.
-    pub fn simple_lookup(
-        &self,
-        version: SnapshotVersion,
-        key: &K,
-    ) -> Result<U256, StakeTableError> {
-        let root = Self::get_root(self, version)?;
-        match self.mapping.get(key) {
-            Some(index) => {
-                let branches = to_merkle_path(*index, self.height);
-                root.simple_lookup(self.height, &branches)
             }
             None => Err(StakeTableError::KeyNotFound),
         }
